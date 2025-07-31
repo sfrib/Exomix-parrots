@@ -1,0 +1,115 @@
+[
+  ...EXISTING SPECIES...,
+  {
+    "species": "Agapornis růžohrdlý",
+    "scientific": "Agapornis roseicollis",
+    "averageWeight": 45,
+    "defaultIntake": 4,
+    "notes": "Nejčastější agapornis, velmi aktivní, citlivý na přebytek tuku."
+  },
+  {
+    "species": "Agapornis škraboškový",
+    "scientific": "Agapornis personatus",
+    "averageWeight": 42,
+    "defaultIntake": 3.5,
+    "notes": "Barevné mutace, podobné potřeby jako růžohrdlý."
+  },
+  {
+    "species": "Papoušíček zelený",
+    "scientific": "Forpus passerinus",
+    "averageWeight": 26,
+    "defaultIntake": 3,
+    "notes": "Jemný a tichý, nenáročný druh, vhodný pro byty."
+  },
+  {
+    "species": "Bourkův papoušek",
+    "scientific": "Neopsephotus bourkii",
+    "averageWeight": 50,
+    "defaultIntake": 5,
+    "notes": "Klidný noční pták, potřebuje vyšší vlákninu a mírný tuk."
+  },
+  {
+    "species": "Papoušek zpěvavý",
+    "scientific": "Psephotus haematonotus",
+    "averageWeight": 70,
+    "defaultIntake": 6,
+    "notes": "Australský původ, barevný, potřebuje rozmanité zrno a minerály."
+  },
+  {
+    "species": "Pyrura zelenolící",
+    "scientific": "Pyrrhura molinae",
+    "averageWeight": 60,
+    "defaultIntake": 6,
+    "notes": "Mazlivý druh, vyšší potřeba ovoce a vlákniny."
+  },
+  {
+    "species": "Pyrura hnědohlavý",
+    "scientific": "Pyrrhura frontalis",
+    "averageWeight": 65,
+    "defaultIntake": 6,
+    "notes": "Podobné potřeby jako molinae, lehce větší."
+  },
+  {
+    "species": "Papoušek horský žlutohlavý",
+    "scientific": "Polytelis anthopeplus",
+    "averageWeight": 130,
+    "defaultIntake": 10,
+    "notes": "Voliérový druh, vyšší potřeba bílkovin a vitamínu A."
+  },
+  {
+    "species": "Aratinga jendaya",
+    "scientific": "Aratinga jandaya",
+    "averageWeight": 125,
+    "defaultIntake": 10,
+    "notes": "Hlasitý, zvídavý, ideální pro voliéry."
+  },
+  {
+    "species": "Aratinga nanday",
+    "scientific": "Aratinga nenday",
+    "averageWeight": 135,
+    "defaultIntake": 10,
+    "notes": "Potřebuje hodně stimulace, náchylný na stereotypie."
+  },
+  {
+    "species": "Ara červenoramenný",
+    "scientific": "Primolius maracana",
+    "averageWeight": 300,
+    "defaultIntake": 16,
+    "notes": "Středně velká ara, tišší a učenlivá."
+  },
+  {
+    "species": "Ara vojenský",
+    "scientific": "Ara militaris",
+    "averageWeight": 750,
+    "defaultIntake": 30,
+    "notes": "Silný zobák, vyšší nároky na tuk a ořechy."
+  },
+  {
+    "species": "Amazoňan modrobradý",
+    "scientific": "Amazona farinosa",
+    "averageWeight": 600,
+    "defaultIntake": 28,
+    "notes": "Velký druh, pozor na přetukování, potřebuje vlákninu."
+  },
+  {
+    "species": "Amazoňan bělobřichý",
+    "scientific": "Amazona albifrons",
+    "averageWeight": 280,
+    "defaultIntake": 15,
+    "notes": "Nižší hlučnost, doporučit směs s ovocem a Ca."
+  },
+  {
+    "species": "Papoušek královský",
+    "scientific": "Alisterus scapularis",
+    "averageWeight": 260,
+    "defaultIntake": 14,
+    "notes": "Australský původ, vhodný pro smíšené směsi a ovocné složky."
+  },
+  {
+    "species": "Papoušek nádherný",
+    "scientific": "Neophema splendida",
+    "averageWeight": 35,
+    "defaultIntake": 3,
+    "notes": "Drobné zrno, velmi citlivý na přebytek tuku."
+  }
+]
