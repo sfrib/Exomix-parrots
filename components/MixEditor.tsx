@@ -6,6 +6,7 @@ import { solveNutrition, IngredientPortion } from "@/utils/solver";
 import { validateMix } from "@/utils/validator";
 import { validateWithMode } from "@/utils/modeValidator";
 import HistoryViewer from "@/components/HistoryViewer";
+import NutritionalChart from "@/components/NutritionalChart";
 
 export default function MixEditor() {
   const [mix, setMix] = useState<IngredientPortion[]>([]);
@@ -81,6 +82,8 @@ export default function MixEditor() {
 
       <h2 className="text-xl font-semibold mb-2">Výživové hodnoty:</h2>
       <pre className="bg-gray-100 p-2 rounded mb-4">{JSON.stringify(nutrition, null, 2)}</pre>
+
+      <NutritionalChart totals={nutrition} />
 
       {warnings.length > 0 && (
         <div className="text-red-600 mb-4">
