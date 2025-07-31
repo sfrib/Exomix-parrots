@@ -1,3 +1,7 @@
+
+import HistoryViewer from "@/components/HistoryViewer";
+
+
 // components/MixEditor.tsx
 import { useState } from "react";
 import ingredients from "@/data/ingredients.json";
