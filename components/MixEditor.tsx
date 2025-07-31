@@ -1,7 +1,3 @@
-
-import HistoryViewer from "@/components/HistoryViewer";
-
-
 // components/MixEditor.tsx
 import { useState } from "react";
 import ingredients from "@/data/ingredients.json";
@@ -9,6 +5,7 @@ import profiles from "@/data/profiles.json";
 import { solveNutrition, IngredientPortion } from "@/utils/solver";
 import { validateMix } from "@/utils/validator";
 import { validateWithMode } from "@/utils/modeValidator";
+import HistoryViewer from "@/components/HistoryViewer";
 
 export default function MixEditor() {
   const [mix, setMix] = useState<IngredientPortion[]>([]);
@@ -24,6 +21,12 @@ export default function MixEditor() {
       updated.push({ name, percentage });
     }
     setMix(updated);
+  };
+
+  const handleLoadFromHistory = (item: any) => {
+    setMix(item.mix);
+    setSelectedSpecies(item.species);
+    setMode(item.mode);
   };
 
   const nutrition = solveNutrition(mix);
@@ -92,6 +95,8 @@ export default function MixEditor() {
           <ul>{modeAlerts.map((a, i) => <li key={i}>⚠️ {a.message}</li>)}</ul>
         </div>
       )}
+
+      <HistoryViewer onLoad={handleLoadFromHistory} />
     </div>
   );
 }
