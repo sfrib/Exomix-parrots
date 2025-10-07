@@ -45,7 +45,7 @@ Aplikace má být:
 | 📲 **Notifikace & Checklisty** | Připomínky (např. přidání Ca, doplnění oleje) + kontrolní seznam před mícháním. |
 | 🪶 **Subprofily papoušků** | Jeden papoušek může mít různé stavy: „Zima“, „Hnízdění“, „Nemocná játra“. |
 | ☁️ **Integrace cloud storage** | Uložení receptur a výživových dat do VetExotic databáze / Supabase. |
-
+I 🔌 IoT Hardware	Automatické dávkování krmiva (ExoMix Feeder).
 ---
 
 ## 🧱 Architektura
@@ -252,6 +252,16 @@ Zkopírovat kód
 | **Marketing** | Komunikace s chovateli, e-shop napojení |
 
 ---
+
+| Fáze  | Popis                                | Stav    |
+| ----- | ------------------------------------ | ------- |
+| ✅ V1  | Lokální solver + PDF export          | Hotovo  |
+| 🚧 V2 | Web CRUD a admin panel               | Probíhá |
+| 🔜 V3 | AI Kubíček + GPT analýza             | Plán    |
+| 🔜 V4 | VetExotic Clinic / Registr integrace | Plán    |
+| 🔜 V5 | PWA mobilní verze                    | Plán    |
+| 🔜 V6 | IoT Feeder + Cloud                   | Plán    |
+
 
 ## 🧠 Motto
 
