@@ -271,7 +271,7 @@ Zkopírovat kód
 ---
 
 © 2025 **VetExotic Group s.r.o.** – All rights reserved.
-Chceš, abych ti to rovnou převedl do PDF verze (pro investory / tým) a přidal titulní stránku s logem VetExotic Group a ExoMix?
+
 
 
 
