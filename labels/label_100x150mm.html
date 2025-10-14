@@ -1,0 +1,97 @@
+    <!doctype html>
+    <html lang="cs">
+    <head>
+      <meta charset="utf-8">
+      <title>ExoMix – Etiketa (100×150 mm)</title>
+      <style>
+        @page { size: 100mm 150mm; margin: 0; }
+        body{width:100mm;height:150mm;display:flex;align-items:center;justify-content:center;background:#f8fafc;}
+      </style>
+      <style>/* VetExotic brand */
+:root{
+  --brand:#082C53;
+  --accent:#9ACD30;
+  --ink:#1b2838;
+  --muted:#6b7a90;
+  --border:#e6ecf2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;color:var(--ink);font-family:Arial,Helvetica,sans-serif;}
+.label{border:1px solid var(--border); padding:8mm; position:relative; background:#fff;}
+.header{display:flex; align-items:center; justify-content:space-between; margin-bottom:3mm;}
+.brand{font-weight:700; font-size:7mm; color:#fff; background:var(--brand); padding:2mm 3mm; border-radius:2mm;}
+.recipe{font-size:5.2mm; font-weight:700; color:var(--brand);}
+.badges{display:flex; gap:2mm; flex-wrap:wrap}
+.badge{border:1px solid var(--brand); color:var(--brand); border-radius:999px; padding:1mm 2.5mm; font-size:3.2mm;}
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin:3mm 0;}
+.card{border:1px solid var(--border); border-radius:2mm; padding:2.5mm;}
+.card h4{margin:0 0 1.5mm 0; font-size:3.6mm; color:var(--brand);}
+.table{width:100%; border-collapse:collapse; font-size:3.2mm;}
+.table th,.table td{padding:1.5mm; border-top:1px solid var(--border); text-align:left;}
+.table th{color:var(--muted); font-weight:600;}
+.small{font-size:3mm; color:var(--muted);}
+.footer{display:flex; justify-content:space-between; align-items:flex-end; gap:3mm; margin-top:3mm;}
+.qr{width:28mm; height:28mm; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:3mm; color:var(--muted);}
+.bar{height:12mm; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:3mm; color:var(--muted);}
+hr{border:0; border-top:1px solid var(--border); margin:2.5mm 0;}
+.warning{background:#fffbe6; border:1px solid #f1e6a6; padding:2mm; border-radius:2mm; font-size:3.2mm;}
+.brandline{height:2mm; background:linear-gradient(90deg,var(--brand), var(--accent)); margin:-8mm -8mm 4mm -8mm;}
+
+/* Print specifics */
+@media print{
+  .no-print{display:none!important}
+  .label{border:0}
+}
+</style>
+    </head>
+    <body>
+      <div class="label" style="width:94mm;height:144mm;">
+        <div class="brandline"></div>
+        <div class="header">
+          <div class="brand">ExoMix</div>
+          <div class="badges">
+            <div class="badge">{net_weight}</div>
+            <div class="badge">Ca:P {cap_ratio}</div>
+            <div class="badge">{energy_kj_per_100g} kJ / 100 g</div>
+          </div>
+        </div>
+        <div class="recipe">{recipe_name}</div>
+        <div class="small">{species_common} <i>({species_latin})</i> • Šarže: {batch_code}</div>
+
+        <div class="grid">
+          <div class="card">
+            <h4>Složení</h4>
+            <div class="small">{ingredients_list}</div>
+            <hr/>
+            <table class="table">
+              <thead><tr><th>Živina</th><th>Hodnota</th></tr></thead>
+              <tbody>
+                <tr><td>Tuk</td><td>{fat_pct} %</td></tr>
+                <tr><td>Bílkoviny</td><td>{protein_pct} %</td></tr>
+                <tr><td>Vláknina</td><td>{fiber_pct} %</td></tr>
+                <tr><td>Sacharidy</td><td>{carb_pct} %</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h4>Pokyny & bezpečnost</h4>
+            <div class="warning">{vet_status}</div>
+            <div class="small" style="margin-top:2mm;">Alergeny: {allergens}</div>
+            <div class="small">Skladování: {storage}</div>
+            <hr/>
+            <div class="small">Schválil: {approved_by} • Platnost do: {approved_until}</div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div style="flex:1;">
+            <div class="small">{made_by}</div>
+            <div class="small">{contact}</div>
+            <div class="small">Poznámka: {notes}</div>
+          </div>
+          <div class="qr">QR: {qr_url}</div>
+          <div class="bar">EAN: {barcode}</div>
+        </div>
+      </div>
+    </body>
+    </html>

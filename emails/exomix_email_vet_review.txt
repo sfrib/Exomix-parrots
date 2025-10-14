@@ -1,0 +1,33 @@
+ExoMix – Žádost o schválení speciální diety
+
+Zákazník: {{owner_name}} • {{owner_phone}} • {{owner_email}}
+Zvíře: {{species_common}} ({{species_latin}}) „{{animal_name}}“, {{animal_age}} let
+Dieta: {{diet_type}} • verze {{recipe_version}}
+
+Souhrn živin:
+- Tuk: {{fat_pct}} %
+- Bílkoviny: {{protein_pct}} %
+- Vláknina: {{fiber_pct}} %
+- Ca:P: {{ca_to_p}}
+- Cena: {{price_per_kg}} Kč / kg
+
+Odchylky vs. referenční profil:
+- {{delta_fat}}
+- {{delta_protein}}
+- {{delta_fiber}}
+- {{delta_cap}}
+
+Složení receptu:
+{{#each mix_items}}
+- {{name}} – {{share_pct}} %
+{{/each}}
+
+Akce:
+- Otevřít ve Vet-Dashboardu: {{dashboardUrl}}
+- Schválit: {{approveUrl}}
+- Vrátit s připomínkami: {{requestChangesUrl}}
+- Zamítnout: {{rejectUrl}}
+
+Bezpečnost: jednorázový podepsaný odkaz (platný 24 h).
+Nastavení notifikací: {{preferencesUrl}}
+Zásady soukromí: {{privacyUrl}}

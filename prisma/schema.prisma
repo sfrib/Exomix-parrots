@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(CHOVATEL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notifications          Notification[]
+  userNotificationSettings UserNotificationSettings?
+  recipes   Recipe[]
+  vetReviews VetReview[]
+}
+
+enum Role {
+  CHOVATEL
+  VETERINAR
+  ADMIN
+}
+
+model Species {
+  id        String   @id @default(cuid())
+  common    String
+  latin     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recipes   Recipe[]
+}
+
+model Recipe {
+  id           String   @id @default(cuid())
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id])
+  speciesId    String
+  species      Species  @relation(fields: [speciesId], references: [id])
+  name         String
+  version      Int      @default(1)
+  dietType     DietType?
+  medical      Boolean  @default(false)
+  status       RecipeStatus @default(DRAFT)
+  pricePerKg   Float?
+  mixItemsJson Json
+  nutritionSummaryJson Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vetReviewRequests VetReviewRequest[]
+  vetReviews        VetReview[]
+}
+
+enum DietType {
+  HEPATIC
+  RENAL
+  GALLBLADDER
+  OBESITY
+  STRESS
+  RECONVAL
+  JUVENILE
+}
+
+enum RecipeStatus {
+  DRAFT
+  PENDING_VET_REVIEW
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+  EXPIRED
+}
+
+model VetReviewRequest {
+  id        String   @id @default(cuid())
+  recipeId  String
+  recipe    Recipe   @relation(fields: [recipeId], references: [id])
+  sentToEmail String?
+  vetId     String?
+  channel   RequestChannel
+  createdAt DateTime @default(now())
+  currentStatus ReviewStatus @default(PENDING)
+}
+
+enum RequestChannel {
+  EMAIL
+  DASHBOARD
+}
+
+enum ReviewStatus {
+  PENDING
+  DECIDED
+}
+
+model VetReview {
+  id         String   @id @default(cuid())
+  recipeId   String
+  recipe     Recipe   @relation(fields: [recipeId], references: [id])
+  vetId      String?
+  vet        User?    @relation(fields: [vetId], references: [id])
+  decision   Decision
+  notes      String?
+  validUntil DateTime?
+  signedAt   DateTime @default(now())
+  signatureRef String?
+}
+
+enum Decision {
+  APPROVED
+  CHANGES
+  REJECTED
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  type       NotificationType
+  entityType String
+  entityId   String
+  payload    Json
+  status     NotificationStatus @default(UNREAD)
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+}
+
+enum NotificationType {
+  REVIEW_REQUESTED
+  REVIEW_DECIDED
+  REVIEW_REMINDER
+  REVIEW_EXPIRING
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+model EmailQueue {
+  id        String   @id @default(cuid())
+  toEmail   String
+  subject   String
+  html      String?
+  text      String?
+  status    EmailStatus @default(QUEUED)
+  retries   Int      @default(0)
+  errorMsg  String?
+  createdAt DateTime @default(now())
+  sentAt    DateTime?
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  ERROR
+}
+
+model UserNotificationSettings {
+  id          String @id @default(cuid())
+  userId      String @unique
+  user        User   @relation(fields: [userId], references: [id])
+  emailEnabled  Boolean @default(true)
+  digestDaily   Boolean @default(false)
+  pushEnabled   Boolean @default(false)
+  quietHoursJson Json?
+}
