@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-import { Ingredient } from '@/src/types/types';
+import type { Ingredient } from '@/src/types/types';
 
 type IngredientAction = (formData: FormData) => Promise<void>;
 

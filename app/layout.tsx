@@ -1,9 +1,10 @@
 import './globals.css';
 
-import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'ExoMix',
   description: 'Výživa exotických ptáků – ExoMix',
 };

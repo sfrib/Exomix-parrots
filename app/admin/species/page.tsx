@@ -2,7 +2,7 @@ import { revalidatePath } from 'next/cache';
 
 import SpeciesClient from './SpeciesClient';
 import { createReadonlyClient, createServiceClient } from '@/src/lib/supabase';
-import { Species } from '@/src/types/types';
+import type { Species } from '@/src/types/types';
 
 export const dynamic = 'force-dynamic';
 
