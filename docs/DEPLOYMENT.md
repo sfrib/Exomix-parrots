@@ -65,7 +65,7 @@ Po uložení konfigurace spusť první build. V logu uvidíš kroky `npm install
 
 - [ ] Ověř API: `/api/configurator`, `/api/export/csv`, `/api/export/pdf`.
 - [ ] Zkontroluj admin panel `/admin/ingredients` a `/admin/species`.
-- [ ] Spusť PDF export (používá `puppeteer-core` + `@sparticuz/chromium` – na Vercelu funguje bez extra nastavení).
+- [ ] Spusť PDF export (používá `puppeteer-core` + `chrome-aws-lambda` – na Vercelu funguje bez extra nastavení).
 - [ ] Otestuj e-mailový tok (např. `npm run workers:reminder` přes Vercel cron job nebo ručně).
 - [ ] Nastav monitoring (Logtail/Sentry) dle roadmapy.
 
