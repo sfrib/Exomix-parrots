@@ -1,5 +1,12 @@
+import type { ReactNode } from 'react';
 
-export default function Card({ title, children, actions }:{ title?:string; children:React.ReactNode; actions?:React.ReactNode }) {
+interface CardProps {
+  title?: string;
+  children: ReactNode;
+  actions?: ReactNode;
+}
+
+export default function Card({ title, children, actions }: CardProps) {
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between">

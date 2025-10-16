@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-import { Species, SpeciesCategory } from '@/src/types/types';
+import type { Species, SpeciesCategory } from '@/src/types/types';
 
 type SpeciesAction = (formData: FormData) => Promise<void>;
 

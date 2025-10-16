@@ -1,13 +1,15 @@
-
 import './globals.css';
-import Link from 'next/link';
 
-export const metadata = {
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import type { ReactNode } from 'react';
+
+export const metadata: Metadata = {
   title: 'ExoMix',
   description: 'Výživa exotických ptáků – ExoMix',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="cs">
       <body>

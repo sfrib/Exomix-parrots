@@ -2,7 +2,9 @@ import { revalidatePath } from 'next/cache';
 
 import IngredientsClient from './IngredientsClient';
 import { createReadonlyClient, createServiceClient } from '@/src/lib/supabase';
-import { Ingredient } from '@/src/types/types';
+import type { Ingredient } from '@/src/types/types';
+
+export const dynamic = 'force-dynamic';
 
 function mapIngredient(row: Record<string, unknown>): Ingredient {
   return {
