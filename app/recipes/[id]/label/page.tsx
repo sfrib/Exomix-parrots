@@ -52,11 +52,11 @@ function Label() {
   };
   return (
     <div className="bg-gray-50 p-6">
-      <style dangerouslySetInnerHTML={__html: css} />
+      <style dangerouslySetInnerHTML={{ __html: css }} />
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="card p-4 flex-1">
           <div className="text-sm text-muted mb-3">Náhled etikety (A6)</div>
-          <div className="label" style={width:'105mm', height:'148mm'}>
+          <div className="label" style={{ width: '105mm', height: '148mm' }}>
             <div className="brandline"></div>
             <div className="header">
               <div className="brand">ExoMix</div>
@@ -82,7 +82,17 @@ function Label() {
               </div>
               <div className="card">
                 <h4>Pokyny & bezpečnost</h4>
-                <div className="small" style={background:'#fffbe6', border:'1px solid #f1e6a6', padding:'4px 8px', borderRadius:'6px'}>{data.vet_status}</div>
+                <div
+                  className="small"
+                  style={{
+                    background: '#fffbe6',
+                    border: '1px solid #f1e6a6',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  {data.vet_status}
+                </div>
                 <div className="small mt-2">Alergeny: {data.allergens}</div>
                 <div className="small">Skladování: {data.storage}</div>
                 <div className="small mt-2">Schválil: {data.approved_by} • Platnost do: {data.approved_until}</div>

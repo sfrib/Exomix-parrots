@@ -14,7 +14,7 @@ Tento balík doplňuje předchozí „vet review + notifikace“ o:
 ## Instalace
 ```
 npm i jsonwebtoken
-# plus puppeteer/playwright server-side pro PDF (dle volby)
+# plus @react-pdf/renderer server-side pro PDF (dle volby)
 ```
 ENV:
 ```
@@ -27,4 +27,4 @@ APP_URL=https://app.exomix.cz
 - Jednoklikové akce přesměrovávají přes `/api/vet/reviews/oneclick?token=...` na bezpečný endpoint.
 - RBAC helper propojte s vaším auth (NextAuth/Supabase).
 - Feedy mají pouze mock – přidejte reálné scraping/API dle podmínek dodavatelů.
-- PDF generujte přes Puppeteer: render HTML šablony a `page.pdf()`.
+- PDF generujte přes `@react-pdf/renderer`: poskládej komponentu a vrať `pdf(Component).toBuffer()`.

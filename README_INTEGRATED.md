@@ -14,7 +14,7 @@ Tento balíček spojuje:
 1) Zkopíruj složku do projektu (nebo jako repo).  
 2) Nainstaluj balíčky pro PDF/QR/EAN:
 ```
-npm i chrome-aws-lambda puppeteer-core qrcode bwip-js
+npm i @react-pdf/renderer qrcode bwip-js
 ```
 3) Přidej Tailwind a postcss (pokud ještě nemáš).  
 4) Spusť `npm run dev` a otevři:
@@ -33,5 +33,5 @@ npm i chrome-aws-lambda puppeteer-core qrcode bwip-js
 - [x] Grafy renderují bez JS knihoven (čisté SVG), žádné konflikty s Tailwind
 
 ## Pozn.: data jsou mock
-- Napojení na DB: v API route `/pages/api/recipes/[id]/label-pdf.ts` nahraď mock daty reálnými (Prisma/Supabase).
+- Napojení na DB: v API route `/pages/api/recipes/[id]/label-pdf.tsx` nahraď mock daty reálnými (Prisma/Supabase).
 - QR odkaz a EAN vygeneruj z dat receptu/šarže.
