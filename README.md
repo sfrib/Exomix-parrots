@@ -1,5 +1,7 @@
 # ExoMix – Complete App
 
+> **Strategický plán:** Detailní produktový roadmap najdeš v [`docs/ROADMAP.md`](./docs/ROADMAP.md). Používej ho jako zdroj pravdy pro prioritizaci dalších modulů a integrací.
+
 Kompletní reference implementace ExoMixu: Next.js 14 (App Router) front-end, REST API, PDF export etiket, notifikační workflow a podpůrné skripty pro veterinární revize receptů.
 
 ## Co potřebujeme od tebe, aby projekt fungoval
@@ -64,6 +66,17 @@ Po startu otevři následující ukázkové stránky:
 - `npm run test` – Playwright smoke test UI
 - `npm run prisma:migrate` – vytvoření/aktualizace DB schématu
 - `npm run workers:reminder` / `npm run workers:expiring` – ruční spuštění cron skriptů pro notifikace
+
+## Nasazení na Vercel
+
+Kompletní postup včetně seznamu environment proměnných, nastavení Supabase a post-deploy checklistu najdeš v průvodci
+[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md). Stručně:
+
+1. Připrav databázi (Supabase/Postgres) a spusť migrace.
+2. Přidej všechny tajné klíče do Vercel projektu (`DATABASE_URL`, SMTP, podepisování odkazů...).
+3. Nech Vercel sestavit projekt přes `npm run build` a po prvním deploy zkontroluj admin UI, exporty a API.
+
+Tento návod je sladěný s roadmapou VetExotic Group, takže při každém release ověř, že stav implementace odpovídá aktuální fázi.
 
 ## Struktura
 
