@@ -1,10 +1,12 @@
 # ExoMix — Codex Brief (v1.1 Core Pack)
 
+> **Roadmap alignment:** All tasks should reference the strategic vision described in [`docs/ROADMAP.md`](./docs/ROADMAP.md). Prioritise features that progress the phases and modules outlined there so the product remains consistent with VetExotic Group's plan.
+
 ## 1) Mise & kontext
 
 * **Projekt:** ExoMix – inteligentní výživový konfigurátor pro exotická zvířata.
 * **Cíl:** Poskytnout chovatelům a veterinářům nástroj pro formulaci, vyhodnocení a archivaci krmných směsí (fokus na papoušky).
-* **Scope verze v1.1 (Core Pack+):** veřejná webová aplikace (bez loginu) se 4 moduly – Atlas papoušků, Atlas surovin, Mixárna a Můj Garáž.
+* **Scope verze v1.1 (Core Pack+):** veřejná webová aplikace (bez loginu) se 4 moduly – Atlas papoušků, Atlas surovin, Mixárna a Můj Garáž – navazuje na roadmapu (fáze ✅ V1 až 🚧 V2).
 * **Ekosystém:** připraveno na integrace VetExotic Cloud (Můj Exot, RegistrPtaku.cz, Laguna, VetEdu Hub).
 * **Technologie:** Next.js 14 (App Router) + TypeScript + TailwindCSS + shadcn/ui, Supabase klient (připravený), Recharts pro grafy, export CSV/PDF.
 
