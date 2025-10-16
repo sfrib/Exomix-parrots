@@ -14,7 +14,7 @@ Tento balíček spojuje:
 1) Zkopíruj složku do projektu (nebo jako repo).  
 2) Nainstaluj balíčky pro PDF/QR/EAN:
 ```
-npm i chrome-aws-lambda puppeteer-core qrcode bwip-js
+npm i @sparticuz/chromium puppeteer-core qrcode bwip-js
 ```
 3) Přidej Tailwind a postcss (pokud ještě nemáš).  
 4) Spusť `npm run dev` a otevři:

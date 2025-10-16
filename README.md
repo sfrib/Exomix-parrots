@@ -93,7 +93,7 @@ Tento návod je sladěný s roadmapou VetExotic Group, takže při každém rele
 
 ## Důležité poznámky k provozu
 
-- PDF generování využívá `chrome-aws-lambda` + `puppeteer-core`. Na Vercelu funguje out-of-the-box, lokálně můžeš přepnout na plný `puppeteer` dle potřeby.
+- PDF generování využívá `@sparticuz/chromium` + `puppeteer-core`. Na Vercelu funguje out-of-the-box, lokálně můžeš přepnout na plný `puppeteer` dle potřeby.
 - API zatím používá **mock data** – pro produkční nasazení napoj Prisma dotazy na skutečná data z Postgres/Supabase.
 - E-maily běží přes Nodemailer; pro produkci je možné přepnout na SendGrid/Mailjet/SMTP relay dle preferencí.
 - Playwright test (`npm run test`) předpokládá běžící dev server na `http://localhost:3000`.
