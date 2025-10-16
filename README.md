@@ -1,5 +1,7 @@
 # ExoMix – Complete App
 
+> **Strategický plán:** Detailní produktový roadmap najdeš v [`docs/ROADMAP.md`](./docs/ROADMAP.md). Používej ho jako zdroj pravdy pro prioritizaci dalších modulů a integrací.
+
 Kompletní reference implementace ExoMixu: Next.js 14 (App Router) front-end, REST API, PDF export etiket, notifikační workflow a podpůrné skripty pro veterinární revize receptů.
 
 ## Co potřebujeme od tebe, aby projekt fungoval
@@ -65,6 +67,17 @@ Po startu otevři následující ukázkové stránky:
 - `npm run prisma:migrate` – vytvoření/aktualizace DB schématu
 - `npm run workers:reminder` / `npm run workers:expiring` – ruční spuštění cron skriptů pro notifikace
 
+## Nasazení na Vercel
+
+Kompletní postup včetně seznamu environment proměnných, nastavení Supabase a post-deploy checklistu najdeš v průvodci
+[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md). Stručně:
+
+1. Připrav databázi (Supabase/Postgres) a spusť migrace.
+2. Přidej všechny tajné klíče do Vercel projektu (`DATABASE_URL`, SMTP, podepisování odkazů...).
+3. Nech Vercel sestavit projekt přes `npm run build` a po prvním deploy zkontroluj admin UI, exporty a API.
+
+Tento návod je sladěný s roadmapou VetExotic Group, takže při každém release ověř, že stav implementace odpovídá aktuální fázi.
+
 ## Struktura
 
 - `app/` – Next.js App Router (layouty, stránky, UI)
@@ -80,7 +93,7 @@ Po startu otevři následující ukázkové stránky:
 
 ## Důležité poznámky k provozu
 
-- PDF generování využívá `chrome-aws-lambda` + `puppeteer-core`. Na Vercelu funguje out-of-the-box, lokálně můžeš přepnout na plný `puppeteer` dle potřeby.
+- PDF generování využívá `@sparticuz/chromium` + `puppeteer-core`. Na Vercelu funguje out-of-the-box, lokálně můžeš přepnout na plný `puppeteer` dle potřeby.
 - API zatím používá **mock data** – pro produkční nasazení napoj Prisma dotazy na skutečná data z Postgres/Supabase.
 - E-maily běží přes Nodemailer; pro produkci je možné přepnout na SendGrid/Mailjet/SMTP relay dle preferencí.
 - Playwright test (`npm run test`) předpokládá běžící dev server na `http://localhost:3000`.

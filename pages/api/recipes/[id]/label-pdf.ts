@@ -1,6 +1,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import chromium from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 import QRCode from 'qrcode';
 import bwipjs from 'bwip-js';
 
@@ -116,15 +117,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     </div>
   </body></html>`;
 
-  // Launch headless Chrome (works on Vercel/Node with chrome-aws-lambda, or regular puppeteer locally)
-  let browser = null;
+  // Launch headless Chromium bundle (Vercel friendly via @sparticuz/chromium, works locally with puppeteer-core)
+  let browser: puppeteer.Browser | null = null;
   try {
-    const executablePath = await chromium.executablePath;
-    browser = await chromium.puppeteer.launch({
+    const executablePath = await chromium.executablePath();
+    browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
-      executablePath,
-      headless: true,
+      executablePath: executablePath ?? undefined,
+      headless: chromium.headless,
     });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
