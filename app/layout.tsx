@@ -1,5 +1,6 @@
-
 import './globals.css';
+
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 export const metadata = {
@@ -7,7 +8,7 @@ export const metadata = {
   description: 'Výživa exotických ptáků – ExoMix',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="cs">
       <body>

@@ -1,14 +1,14 @@
-
 'use client';
 
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 type Props = {
-  children: React.ReactNode;
+  children: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   onClick?: () => Promise<void> | void;
   disabled?: boolean;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   title?: string;
 };
 

@@ -4,6 +4,8 @@ import SpeciesClient from './SpeciesClient';
 import { createReadonlyClient, createServiceClient } from '@/src/lib/supabase';
 import { Species } from '@/src/types/types';
 
+export const dynamic = 'force-dynamic';
+
 function mapSpecies(row: Record<string, unknown>): Species {
   return {
     id: Number(row.id),
