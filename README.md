@@ -1,5 +1,7 @@
 # ExoMix – Complete App
 
+> **Strategický plán:** Detailní produktový roadmap najdeš v [`docs/ROADMAP.md`](./docs/ROADMAP.md). Používej ho jako zdroj pravdy pro prioritizaci dalších modulů a integrací.
+
 Kompletní reference implementace ExoMixu: Next.js 14 (App Router) front-end, REST API, PDF export etiket, notifikační workflow a podpůrné skripty pro veterinární revize receptů.
 
 ## Co potřebujeme od tebe, aby projekt fungoval
