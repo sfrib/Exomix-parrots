@@ -1,223 +1,223 @@
-# ExoMix — Codex Brief (v0.1)
+# ExoMix — Codex Brief (v1.1 Core Pack)
 
-## 1) Mise & rozsah
+## 1) Mise & kontext
 
-* **Cíl:** Webová appka pro návrh krmných směsí pro papoušky. MVP bez loginu.
-* **Moduly v MVP:**
+* **Projekt:** ExoMix – inteligentní výživový konfigurátor pro exotická zvířata.
+* **Cíl:** Poskytnout chovatelům a veterinářům nástroj pro formulaci, vyhodnocení a archivaci krmných směsí (fokus na papoušky).
+* **Scope verze v1.1 (Core Pack+):** veřejná webová aplikace (bez loginu) se 4 moduly – Atlas papoušků, Atlas surovin, Mixárna a Můj Garáž.
+* **Ekosystém:** připraveno na integrace VetExotic Cloud (Můj Exot, RegistrPtaku.cz, Laguna, VetEdu Hub).
+* **Technologie:** Next.js 14 (App Router) + TypeScript + TailwindCSS + shadcn/ui, Supabase klient (připravený), Recharts pro grafy, export CSV/PDF.
 
-  1. Atlas papoušků (10 druhů)
-  2. Suroviny (10 položek)
-  3. Mixárna (výpočet směsi + porovnání s cíli druhu)
-  4. Moje mixy (uložení do localStorage)
-* **Technologie:** Next.js (App Router), TS, Tailwind; data zatím **in-memory JSON**. Připravené schéma pro Supabase.
+## 2) Navigace a IA
 
-## 2) Navigace (bez loginu)
+* Horní menu: **Parrots**, **Ingredients**, **Mixer**, **Garage** (případně Home s rychlou orientací).
+* Každý modul má vlastní stránku v `app/` složce (viz struktura níže).
+* Detailní zobrazení probíhá přes route segments (např. `/app/parrots/[id]`).
+* Lokální data (CSV) jsou dostupná v `public/data`. Čtení probíhá server-side (Node fs) nebo pomocí bundlovaných loaderů.
+* Stav aplikace je lean – přednost mají serverové komponenty a jednoduché klientské hooky (např. pro localStorage).
 
-* Horní menu: **Atlas papoušků**, **Suroviny**, **Mixárna**, **Moje mixy**.
-* Atlas/Suroviny se zobrazují jako **grid karty**, detail jako **občanka** (parametry + cíle/nutrienty).
-* Mixárna: výběr druhu → procenta surovin → výpočet per 100 g (as-fed) → porovnání s cíli → uložit do „Moje mixy“.
-* Moje mixy: čte/maže položky z `localStorage` klíč `exomix.mixes`.
+## 3) Modulové požadavky
 
-## 3) Datové kontrakty (JSON)
+### 3.1 Atlas papoušků ("Občanka druhu")
 
-### 3.1 Species (řádek v `data/species.json`)
+* Zdroj: `public/data/parrots.csv` (10+ druhů, včetně nutričních požadavků).
+* UI: mřížka karet (`ParrotCard.tsx`), detailová stránka s kompletní kartou (identita, taxonomie, biotop, nutriční cíle, bioptio, reprodukce, QR, obrázek).
+* Propojení: možnost rychlého otevření v Mixárně s předvybraným druhem; link na Můj Exot (placeholder).
 
-```
-{
-  "id": "UUID/string",
-  "scientific_name": "Ara ararauna",
-  "common_name": "Ara ararauna (Blue-and-yellow macaw)",
-  "category": "parrot",
-  "adult_mass_g": 900,
-  "ring_size_mm": 20,
-  "biotope": "text",
-  "diet_nature": "text",
-  "target": {
-    "PROTEIN": 14,
-    "FAT": 10,
-    "FIBER": 6,
-    "CA": 0.6,
-    "P": 0.4,
-    "CA_P_RATIO": 1.5,
-    "VIT_A_IU": 5000,
-    "VIT_D3_IU": 600,
-    "VIT_E": 20
-  },
-  "targetUnits": {
-    "PROTEIN": "g/100g",
-    "FAT": "g/100g",
-    "FIBER": "g/100g",
-    "CA": "g/100g",
-    "P": "g/100g",
-    "CA_P_RATIO": "ratio",
-    "VIT_A_IU": "IU/100g",
-    "VIT_D3_IU": "IU/100g",
-    "VIT_E": "mg/100g"
-  }
+### 3.2 Atlas surovin ("Občanka suroviny")
+
+* Zdroj: `public/data/ingredients.csv` (nutriční profil, forma, původ, limity).
+* UI: mřížka karet (`IngredientCard.tsx`) + detail. Filtr `FilterBar.tsx` (např. vysoký protein, nízký tuk).
+* Nutriční data zahrnují makro/mikro živiny, vitaminy, energii, toxicitu. Při zobrazování uvádět jednotky.
+
+### 3.3 Mixárna (Mix Lab)
+
+* UI komponenta `MixCalculator.tsx` (klientská). Obsahuje formulář pro výběr druhu, přidávání ingrediencí a procent.
+* Výpočet: využít `lib/nutritionMath.ts` (vážený průměr na 100 g as-fed). Vypočítat i Ca:P poměr.
+* Výstup: tabulka s výslednými hodnotami + grafy (Recharts – `NutrientChart.tsx`).
+* Integrace: možnost exportu (CSV/PDF) přes `/app/api/export.ts`. Připravený endpoint pro budoucí optimalizátor (`/app/api/optimizer.ts`).
+
+### 3.4 Můj Garáž (My Garage)
+
+* Zobrazení uložených mixů, oblíbených druhů a surovin, poznámek. Zatím bez Supabase Auth – data v localStorage (`exomix.mixes`, `exomix.favorites`, ...).
+* UI: `GaragePanel.tsx`. Zajistit CRUD operace nad localStorage pomocí klientských hooků.
+* Připravit struktury pro pozdější cloud sync (Supabase).
+
+## 4) Datové modely
+
+Zdrojové CSV transformujeme na následující typy (`types/types.ts`):
+
+```ts
+export interface Parrot {
+  id: string
+  name: string
+  latin: string
+  ringNumber: string
+  family: string
+  genus: string
+  continent: string
+  habitat: string
+  activity: string
+  dietNotes: string
+  protein: number
+  fat: number
+  fiber: number
+  ca: number
+  p: number
+  vitA: number
+  vitD3: number
+  vitE: number
+  caPRatio: number
+  bioptio: string
+  reproduction: string
+  incubationDays: number
+  weightLossPct: number
+  humidity: string
+  imageUrl: string
+  qrUrl: string
+}
+
+export interface Ingredient {
+  id: string
+  name: string
+  form: string
+  origin: string
+  protein: number
+  fat: number
+  carbs: number
+  fiber: number
+  ash: number
+  energyKj: number
+  ca: number
+  p: number
+  na: number
+  k: number
+  mg: number
+  fe: number
+  zn: number
+  cu: number
+  mn: number
+  se: number
+  vitA: number
+  vitD3: number
+  vitE: number
+  vitK: number
+  vitBComplex: Record<string, number>
+  toxicity: string
+  imageUrl: string
+  qrUrl: string
+}
+
+export interface Recipe {
+  id: string
+  name: string
+  speciesId: string
+  ingredients: { id: string; percentage: number }[]
+  notes?: string
+  createdAt: string
 }
 ```
 
-### 3.2 Ingredient (řádek v `data/ingredients.json`)
+> **Poznámka:** CSV pole mapujte na uvedené typy; chybějící hodnoty defaultujte na `null` nebo 0 dle smyslu.
+
+## 5) API kontrakty (App Router)
+
+* `GET /api/data/parrots` → vrací seznam papoušků (z `parrots.csv`).
+* `GET /api/data/ingredients` → vrací seznam surovin (z `ingredients.csv`).
+* `GET /api/data/recipes` → vrací recepty (zatím z `recipes.csv` nebo localStorage stub).
+* `POST /api/mix` → vstup `{ speciesId?: string, items: { ingredientId: string, percent: number }[] }`. Výstup `{ per100g: NutrientResultMap, ca_p_ratio: number }`.
+* `POST /api/targets/compare` → vstup `{ mixResult, species }`; výstup `{ rows: { code, unit, actual, target, coverage_pct }[] }`.
+* `POST /api/export` → generuje CSV/PDF (pro vývoj může vracet pouze CSV string/download link).
+* `POST /api/optimizer` → placeholder pro budoucí AI optimalizaci (vracej `501 Not Implemented`).
+
+## 6) Výpočetní pravidla (nutritionMath)
+
+* **Vážený průměr:** `Σ(nutrient_i × percent_i / 100)` na 100 g směsi (as-fed).
+* **CA:P poměr:** pokud jsou dostupné hodnoty, spočítat `ca / p`, jinak `null`.
+* **Coverage:** `actual / target × 100` (použít pouze pokud target > 0).
+* **Validace směsi:** UI hlídá, aby součet procent byl 100 ± tolerance; engine počítá i při odchylce (vypíše varování).
+
+## 7) Struktura projektu
 
 ```
-{
-  "id": "ing-sunflower",
-  "name": "Sunflower seed (Slunečnice černá)",
-  "form": "seed",
-  "moisture_pct": 6,
-  "price_czk_per_kg": 55,
-  "supplier": "string?",
-  "notes": "string?",
-  "nutrients": {
-    "ENERGY_KCAL": 585,
-    "PROTEIN": 20.5,
-    "FAT": 51.0,
-    "FIBER": 9.0,
-    "ASH": 3.0,
-    "CA": 0.23,
-    "P": 0.57,
-    "NA": 0.002,
-    "K": 0.75,
-    "MG": 0.37,
-    "FE": 5.0,
-    "ZN": 5.0,
-    "VIT_A_IU": 20,
-    "VIT_E": 37,
-    "MOISTURE": 6
-  }
-}
+exomix/
+├── app/
+│   ├── parrots/
+│   │   ├── page.tsx
+│   │   └── [id]/page.tsx
+│   ├── ingredients/
+│   │   ├── page.tsx
+│   │   └── [id]/page.tsx
+│   ├── mixer/page.tsx
+│   ├── garage/page.tsx
+│   ├── api/
+│   │   ├── data/
+│   │   │   ├── parrots/route.ts
+│   │   │   ├── ingredients/route.ts
+│   │   │   └── recipes/route.ts
+│   │   ├── mix/route.ts
+│   │   ├── targets/compare/route.ts
+│   │   ├── export/route.ts
+│   │   └── optimizer/route.ts
+│   └── layout.tsx
+├── components/
+│   ├── ParrotCard.tsx
+│   ├── IngredientCard.tsx
+│   ├── MixCalculator.tsx
+│   ├── NutrientChart.tsx
+│   ├── FilterBar.tsx
+│   └── GaragePanel.tsx
+├── lib/
+│   ├── supabaseClient.ts
+│   └── nutritionMath.ts
+├── public/data/
+│   ├── parrots.csv
+│   ├── ingredients.csv
+│   ├── nutrients_reference.csv
+│   └── recipes.csv
+└── types/
+    └── types.ts
 ```
 
-### 3.3 Nutrient kódy (používané klíče)
+## 8) Integrace s VetExotic Cloud
 
-```
-ENERGY_KCAL, PROTEIN, FAT, FIBER, ASH, CARBS,
-CA, P, NA, K, MG, FE, ZN, CU, MN, SE,
-VIT_A_IU, VIT_D3_IU, VIT_E, VIT_K, VIT_C,
-B1, B2, B3, B5, B6, B7, B9, B12,
-MOISTURE, OMEGA3, OMEGA6, CA_P_RATIO
-```
+| Modul | Popis integrace | Status v1.1 |
+|-------|-----------------|-------------|
+| Můj Exot | QR linky na profil zvířete, synchronizace směsí | Placeholder linky |
+| VetExotic Cloud | Sdílení dat napříč klinikami | Design ready |
+| RegistrPtaku.cz | QR identifikace druhu a směsi | Připravené QR pole |
+| Laguna Rescue Center | Rehabilitační protokoly | Data pipeline (TODO) |
+| VetEdu Hub | Edukační obsah a kurzy | Link placeholder |
 
-## 4) API kontrakty (App Router)
+## 9) Verze produktu
 
-* `GET /api/data/species` → `Species[]`
-* `GET /api/data/ingredients` → `Ingredient[]`
-* `POST /api/mix` → vstup:
+| Verze | Funkce |
+|-------|--------|
+| **v1.0 – Core Pack** | Atlas papoušků, Atlas surovin, základní Mixárna |
+| **v1.1 – Core Pack+** | Přidán modul Můj Garáž, grafy v Mixárně, export |
+| **v2.0 – Pro** | Supabase Auth, cloud sync, sdílení receptů |
+| **v3.0 – AI** | AI optimalizace mixů, doporučení |
+| **v4.0 – Edu** | Propojení s VetEdu Hub, vzdělávací materiály |
 
-```
-{
-  "items": [ { "ingredient": { "id": "ing-sunflower", "name": "..." }, "percent": 30 } ],
-  "nutrientsByIngredient": { "ing-sunflower": { "PROTEIN": 20.5, "...": 0 } }
-}
-```
+## 10) Implementační zásady
 
-→ výstup:
+**Ano:**
 
-```
-{
-  "per100g": { "PROTEIN": { "code": "PROTEIN", "unit": "", "weighted_value": 12.3 }, "...": {} },
-  "ca_p_ratio": 1.55
-}
-```
+* Dodržuj typy a API kontrakty výše.
+* Používej existující nutrient kódy (viz CSV) a jednotky.
+* Piš komponenty kompatibilní s App Routerem, využívej Tailwind + shadcn/ui.
+* Při exportu používej standardní knihovny (např. `papaparse` pro CSV).
+* Připrav kód na pozdější Supabase integraci (oddělené vrstvy).
 
-* `POST /api/targets/compare` → vstup:
+**Ne:**
 
-```
-{ "mixResult": { ...z /api/mix }, "species": { ...Species } }
-```
+* Nezaváděj autentizaci, pokud není explicitně požadována.
+* Neměň datové kontrakty bez konzultace.
+* Nepřidávej těžké závislosti (zvaž velikost bundlu).
+* Nepoužívej experimentální API Next.js, která nejsou stabilní ve verzi 14.
 
-→ výstup:
+## 11) Motto
 
-```
-{ "species": {...}, "rows": [ { "code": "PROTEIN", "unit": "g/100g", "actual": 12.3, "target": 14, "coverage_pct": 87.9 } ] }
-```
+> **„ExoMix – Science for feathers.“**
 
-## 5) Výpočetní pravidla (engine)
-
-* **Vážený průměr**: nutrient na 100 g směsi = `Σ( nutrient_i × percent_i/100 )`.
-* **CA:P ratio**: pokud existují `CA` i `P`, `CA/P`.
-* **Porovnání**: `coverage_pct = actual / target * 100` (pokud má druh definovaný cíl).
-* **Validace směsi**: součet `%` přísad by měl = 100 (UI zvýrazní, ale engine počítá i při ≠100).
-
-## 6) UI logika
-
-* **Atlas/Suroviny (grid)**: karty → klik na detail „občanka“ (základní parametry + cíle/nutrienty).
-* **Mixárna**:
-
-  * Select **cílový druh** (volitelný).
-  * Vstup **% podílů** pro každou surovinu (0–100).
-  * Tlačítko **Spočítat** → volá `/api/mix`, pak volitelně `/api/targets/compare`.
-  * **Uložit mix** → `localStorage["exomix.mixes"]`.
-* **Moje mixy**: list uložených mixů, možnost smazat.
-
-## 7) Souborová kostra (minimum)
-
-```
-app/
-  api/
-    mix/route.ts
-    targets/compare/route.ts
-    data/
-      species/route.ts
-      ingredients/route.ts
-  layout.tsx
-  page.tsx
-  species/page.tsx
-  species/[id]/page.tsx
-  ingredients/page.tsx
-  ingredients/[id]/page.tsx
-  mixarna/page.tsx
-  my-mixes/page.tsx
-components/
-  Nav.tsx
-  SpeciesCard.tsx
-  IngredientCard.tsx
-  QuickMix.tsx (volitelně)
-lib/
-  nutrition.ts
-  data.ts
-data/
-  species.json
-  ingredients.json
-styles/
-  globals.css
-```
-
-## 8) Akceptační kritéria (MVP)
-
-* [ ] Build projde, `pnpm dev` → domovská stránka s úvodem + odkaz na Mixárnu.
-* [ ] `/species` a `/ingredients` zobrazí **10 karet**; detail funguje.
-* [ ] `/mixarna` spočítá směs z libovolných podílů, ukáže CA:P, porovná s cíli vybraného druhu.
-* [ ] `/my-mixes` ukládá/maže mixy v `localStorage`.
-* [ ] Žádný login/autorizace.
-
-## 9) Ne/ano checklist (pro Codex)
-
-**Dělej:**
-
-* Dodržuj I/O kontrakty výše.
-* Používej stávající nutrient kódy.
-* Piš TS/Next kód kompatibilní s App Router.
-* Minimalizuj závislosti (Tailwind OK).
-
-**Nedělej:**
-
-* Nezaváděj login/uživatele.
-* Nepřidávej DB vrstvy, pokud není výslovně požadováno (zatím JSON).
-* Neměň kódy nutrientů ani struktury bez důvodu.
-
-## 10) Jedno-záběrové příklady (one-shot)
-
-### 10.1 Vytvořit nový druh
-
-* Přidej objekt do `data/species.json` dle kontraktu; dbej na `target` mapu a `ring_size_mm`.
-
-### 10.2 Přidat novou surovinu
-
-* Přidej objekt do `data/ingredients.json`; vyplň `nutrients` na 100 g (as-fed).
-
-### 10.3 Výpočet směsi v Mixárně
-
-* Z lokálních JSON načti suroviny → sestav mapu `nutrientsByIngredient` → POST `/api/mix` → POST `/api/targets/compare` (pokud je vybrán druh).
-
----
+ExoMix spojuje vědecká data a praxi chovatelů do jednoho digitálního nástroje. Každý commit by měl přiblížit platformu k přesné výživě a lepší péči o exotická zvířata.
