@@ -1,7 +1,9 @@
 import path from "node:path";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import type { Finding, Repo } from "@/generated/prisma/client";
-import { countBySeverity, groupBySeverity, sortFindings, statusFor } from "./findings";
+import type { Finding, Repo, Suppression } from "@/generated/prisma/client";
+import { countBySeverity, groupBySeverity, partitionSuppressed, sortFindings, statusFor, SUPPRESSION_LABEL_CS } from "./findings";
+import { CATEGORY_LABEL_CS, categoryOf, computeScore } from "./score";
+import { VERDICT_LABEL_CS, type AiReview } from "./ai-review";
 import { formatDateTime } from "./format";
 import { SEVERITY_LABEL_CS, STATUS_LABEL_CS, type Severity } from "./severity";
 
@@ -34,8 +36,17 @@ const s = StyleSheet.create({
   footer: { position: "absolute", bottom: 20, left: 36, right: 36, fontSize: 7, color: "#94a3b8", flexDirection: "row", justifyContent: "space-between" },
 });
 
+function parseReview(json: string | null): AiReview | null {
+  try {
+    return json ? (JSON.parse(json) as AiReview) : null;
+  } catch {
+    return null;
+  }
+}
+
 function FindingBlock({ f }: { f: Finding }) {
   const sev = f.severity as Severity;
+  const review = parseReview(f.aiReview);
   return (
     <View style={s.finding} wrap={false}>
       <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
@@ -61,6 +72,12 @@ function FindingBlock({ f }: { f: Finding }) {
       <Text>{f.explanation}</Text>
       <Text style={s.label}>Jak to opravit</Text>
       <Text>{f.fix}</Text>
+      {review ? (
+        <View style={{ marginTop: 4, padding: 4, backgroundColor: "#f5f3ff" }}>
+          <Text style={{ fontWeight: "bold" }}>AI posouzení: {VERDICT_LABEL_CS[review.verdict]}</Text>
+          <Text>{review.summary}</Text>
+        </View>
+      ) : null}
       {f.referenceUrl ? <Text style={[s.muted, { marginTop: 2 }]}>{f.referenceUrl}</Text> : null}
     </View>
   );
@@ -85,11 +102,15 @@ function Section({ title, findings, empty }: { title: string; findings: Finding[
   );
 }
 
-export function renderReport(repo: Repo, findings: Finding[]): Promise<Buffer> {
+export function renderReport(repo: Repo, allFindings: Finding[], suppressions: Suppression[]): Promise<Buffer> {
+  const { active: findings, suppressed } = partitionSuppressed(allFindings, suppressions);
   const counts = countBySeverity(findings);
+  const score = computeScore(findings, { code: Boolean(repo.lastCodeScanAt), deps: Boolean(repo.lastDepScanAt) });
   const generated = formatDateTime(new Date());
-  const code = findings.filter((f) => f.kind === "code");
+  const code = findings.filter((f) => f.kind === "code" && categoryOf(f) !== "agent");
+  const agent = findings.filter((f) => categoryOf(f) === "agent");
   const deps = findings.filter((f) => f.kind === "dependency");
+  const repoFindings = findings.filter((f) => f.kind === "repo");
 
   const doc = (
     <Document title={`RepoGuard – ${repo.fullName}`} author="RepoGuard" language="cs">
@@ -113,12 +134,41 @@ export function renderReport(repo: Repo, findings: Finding[]): Promise<Buffer> {
             </View>
           ))}
         </View>
+        {score ? (
+          <View style={{ marginTop: 10 }}>
+            <Text style={{ fontSize: 12, fontWeight: "bold" }}>
+              Bezpečnostní skóre: {score.score}/100 – známka {score.grade}
+            </Text>
+            <Text style={s.muted}>
+              {score.categories.map((c) => `${CATEGORY_LABEL_CS[c.category]} ${c.score}`).join(" · ")}
+            </Text>
+          </View>
+        ) : null}
         <Text style={{ marginTop: 8 }}>
-          Nálezy v kódu: {code.length} · Zranitelné závislosti: {deps.length}
+          Kód a klíče: {code.length} · AI agenti a CI: {agent.length} · Závislosti: {deps.length} · Nastavení repozitáře: {repoFindings.length}
+          {suppressed.length ? ` · Potlačeno: ${suppressed.length}` : ""}
         </Text>
 
         <Section title="Nálezy ve zdrojovém kódu" findings={code} empty="Žádné nálezy." />
+        <Section title="Konfigurace AI agentů a CI" findings={agent} empty="Žádné nálezy." />
         <Section title="Zranitelné závislosti (CVE)" findings={deps} empty="Žádné známé zranitelnosti." />
+        <Section title="Nastavení repozitáře" findings={repoFindings} empty="Bez doporučení." />
+
+        {suppressed.length ? (
+          <View>
+            <Text style={s.h2}>Potlačené nálezy</Text>
+            {suppressed.map((f) => {
+              const sup = suppressions.find((x) => x.fingerprint === f.fingerprint)!;
+              return (
+                <Text key={f.id}>
+                  • {f.title}
+                  {f.file ? ` (${f.file}${f.line ? `:${f.line}` : ""})` : ""} – {SUPPRESSION_LABEL_CS[sup.status] ?? sup.status}
+                  {sup.note ? `: ${sup.note}` : ""}
+                </Text>
+              );
+            })}
+          </View>
+        ) : null}
 
         <Text style={[s.muted, { marginTop: 16, fontSize: 7.5 }]}>
           Statická analýza vyhledává typické vzory slabých míst a může obsahovat falešně pozitivní nálezy; každý nález

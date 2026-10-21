@@ -7,7 +7,7 @@ import type { Language } from "./types";
  * flagging commented-out code.
  */
 export function stripComments(source: string, language: Language): string {
-  if (language === "config") return source;
+  if (language !== "php" && language !== "js") return source;
   const hashComments = language === "php";
   const out: string[] = [];
   let i = 0;

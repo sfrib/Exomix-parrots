@@ -38,6 +38,7 @@ model Repo {
   scans          Scan[]
   findings       Finding[]
   dependencies   Dependency[]
+  suppressions   Suppression[]
 
   @@unique([userId, githubId])
 }
@@ -51,6 +52,9 @@ model Scan {
   trigger      String    @default("manual") // "manual" | "cron"
   commitSha    String?
   filesScanned Int       @default(0)
+  // Findings that appeared / disappeared compared with the previous scan of the same kind
+  newCount      Int      @default(0)
+  resolvedCount Int      @default(0)
   error        String?
   startedAt    DateTime  @default(now())
   finishedAt   DateTime?
@@ -62,7 +66,7 @@ model Finding {
   id               String   @id @default(cuid())
   repoId           String
   repo             Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  kind             String // "code" | "dependency"
+  kind             String // "code" | "dependency" | "repo"
   // Stable identity used to keep firstSeenAt across scans
   fingerprint      String
   ruleId           String
@@ -84,10 +88,26 @@ model Finding {
   cvssScore        Float?
   cvssVector       String?
   referenceUrl     String?
+  // Optional AI review (JSON, see src/lib/ai-review.ts); carried over between scans by fingerprint
+  aiReview         String?
+  aiReviewedAt     DateTime?
   firstSeenAt      DateTime @default(now())
   createdAt        DateTime @default(now())
 
   @@index([repoId, kind])
+}
+
+/** Triage decision for a finding, matched by fingerprint so it survives re-scans. */
+model Suppression {
+  id          String   @id @default(cuid())
+  repoId      String
+  repo        Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  fingerprint String
+  status      String // "false_positive" | "accepted_risk"
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@unique([repoId, fingerprint])
 }
 
 model Dependency {

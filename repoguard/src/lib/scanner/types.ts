@@ -1,6 +1,11 @@
 import type { Severity } from "../severity";
 
-export type Language = "php" | "js" | "config";
+/**
+ * agentjson: AI agent configs (.claude/settings.json, .mcp.json, .vscode/tasks.json…)
+ * agentmd: agent instruction files (CLAUDE.md, AGENTS.md, .claude/agents/*.md, .cursorrules…)
+ * workflow: GitHub Actions workflows
+ */
+export type Language = "php" | "js" | "config" | "agentjson" | "agentmd" | "workflow";
 
 export interface SourceFile {
   path: string;

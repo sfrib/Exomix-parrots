@@ -52,3 +52,21 @@ export function SeverityCounts({ counts }: { counts: Record<Severity, number> })
     </div>
   );
 }
+
+const GRADE_STYLE: Record<string, string> = {
+  A: "bg-emerald-600 text-white",
+  B: "bg-lime-600 text-white",
+  C: "bg-amber-500 text-white",
+  D: "bg-orange-600 text-white",
+  F: "bg-red-700 text-white",
+};
+
+export function GradeBadge({ grade, score, size = "sm" }: { grade: string; score: number; size?: "sm" | "lg" }) {
+  const box = size === "lg" ? "h-14 w-14 text-3xl" : "h-8 w-8 text-base";
+  return (
+    <span className="inline-flex items-center gap-2" title={`Bezpečnostní skóre ${score}/100`}>
+      <span className={`inline-flex items-center justify-center rounded-lg font-bold ${box} ${GRADE_STYLE[grade] ?? GRADE_STYLE.F}`}>{grade}</span>
+      <span className={size === "lg" ? "text-lg font-semibold" : "text-sm text-slate-600"}>{score}/100</span>
+    </span>
+  );
+}

@@ -1,26 +1,46 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Finding, Suppression } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { countBySeverity, groupBySeverity, isNewFinding, sortFindings, statusFor } from "@/lib/findings";
-import { formatDateTime, plural } from "@/lib/format";
+import { countBySeverity, groupBySeverity, isNewFinding, partitionSuppressed, sortFindings, statusFor } from "@/lib/findings";
+import { formatDateTime } from "@/lib/format";
 import { SEVERITY_LABEL_CS } from "@/lib/severity";
+import { CATEGORY_LABEL_CS, categoryOf, computeScore, type Category } from "@/lib/score";
 import { DEFAULT_EXCLUDES } from "@/lib/scanner/files";
-import { SeverityCounts, StatusBadge } from "@/components/Badges";
+import { aiReviewEnabled } from "@/lib/ai-review";
+import { GradeBadge, SeverityCounts, StatusBadge } from "@/components/Badges";
 import { ActionForm } from "@/components/ActionForm";
 import { FindingCard } from "@/components/FindingCard";
 import { disconnectRepo, saveExcludes, scanRepo } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "code" | "deps" | "inventory" | "history";
+type Tab = "code" | "agent" | "deps" | "repo" | "inventory" | "history" | "suppressed";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "code", label: "Kód" },
+  { id: "code", label: "Kód a klíče" },
+  { id: "agent", label: "AI agenti a CI" },
   { id: "deps", label: "Závislosti (CVE)" },
+  { id: "repo", label: "Nastavení repozitáře" },
   { id: "inventory", label: "Seznam závislostí" },
   { id: "history", label: "Historie skenů" },
+  { id: "suppressed", label: "Potlačené" },
 ];
+
+const TAB_CATEGORIES: Partial<Record<Tab, Category[]>> = {
+  code: ["code", "secrets"],
+  agent: ["agent"],
+  deps: ["deps"],
+  repo: ["repo"],
+};
+
+const EMPTY_TEXT: Partial<Record<Tab, string>> = {
+  code: "Ve zdrojovém kódu nebyla nalezena žádná slabá místa ani uložená hesla.",
+  agent:
+    "V konfiguraci AI agentů (CLAUDE.md, .claude/, .mcp.json, .cursorrules…) ani v GitHub Actions nebyly nalezeny žádné problémy.",
+  repo: "Nastavení repozitáře odpovídá doporučením.",
+};
 
 export default async function RepoDetail({
   params,
@@ -38,19 +58,39 @@ export default async function RepoDetail({
     where: { id, userId: user.id },
     include: {
       findings: true,
+      suppressions: true,
       dependencies: { orderBy: [{ direct: "desc" }, { name: "asc" }] },
-      scans: { orderBy: { startedAt: "desc" }, take: 20 },
+      scans: { orderBy: { startedAt: "desc" }, take: 30 },
     },
   });
   if (!repo) notFound();
 
-  const code = sortFindings(repo.findings.filter((f) => f.kind === "code"));
-  const deps = sortFindings(repo.findings.filter((f) => f.kind === "dependency"));
-  const previousScanEnd = (kind: string) =>
-    repo.scans.filter((s) => s.kind === kind && s.status === "done")[1]?.finishedAt ?? null;
+  const { active, suppressed } = partitionSuppressed(repo.findings, repo.suppressions);
+  const score = computeScore(active, { code: Boolean(repo.lastCodeScanAt), deps: Boolean(repo.lastDepScanAt) });
+  const inTab = (t: Tab) => sortFindings(active.filter((f) => TAB_CATEGORIES[t]?.includes(categoryOf(f))));
+  const previousScanEnd = (kind: string) => repo.scans.filter((s) => s.kind === kind && s.status === "done")[1]?.finishedAt ?? null;
   const lastFailed = repo.scans[0]?.status === "failed" ? repo.scans[0] : null;
   const running = repo.scans.some((s) => s.status === "running");
-  const counts: Record<Tab, number> = { code: code.length, deps: deps.length, inventory: repo.dependencies.length, history: repo.scans.length };
+  const aiEnabled = aiReviewEnabled();
+  const suppressionOf = new Map(repo.suppressions.map((s) => [s.fingerprint, s]));
+
+  const counts: Record<Tab, number> = {
+    code: inTab("code").length,
+    agent: inTab("agent").length,
+    deps: inTab("deps").length,
+    repo: inTab("repo").length,
+    inventory: repo.dependencies.length,
+    history: repo.scans.length,
+    suppressed: suppressed.length,
+  };
+
+  const listProps = (t: Tab) => ({
+    htmlUrl: repo.htmlUrl,
+    commitSha: repo.lastCommitSha,
+    previousScanEnd: previousScanEnd(t === "deps" ? "deps" : "code"),
+    aiEnabled,
+    suppressionOf,
+  });
 
   return (
     <div className="space-y-6">
@@ -59,30 +99,63 @@ export default async function RepoDetail({
           ← Přehled
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold">{repo.fullName}</h1>
-          <StatusBadge status={statusFor(repo, repo.findings)} />
+          <h1 className="break-all text-2xl font-bold">{repo.fullName}</h1>
+          <StatusBadge status={statusFor(repo, active)} />
           <a href={repo.htmlUrl} target="_blank" rel="noreferrer" className="text-sm text-sky-700 hover:underline">
             Otevřít na GitHubu ↗
           </a>
         </div>
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-500">
           <span>Větev: {repo.defaultBranch}</span>
-          <span>Poslední sken kódu: {formatDateTime(repo.lastCodeScanAt)}</span>
-          <span>Poslední kontrola závislostí: {formatDateTime(repo.lastDepScanAt)}</span>
+          <span>Sken kódu: {formatDateTime(repo.lastCodeScanAt)}</span>
+          <span>Kontrola závislostí: {formatDateTime(repo.lastDepScanAt)}</span>
           {repo.lastCommitSha && <span className="font-mono">commit {repo.lastCommitSha.slice(0, 7)}</span>}
         </div>
-        <div className="mt-2">
-          <SeverityCounts counts={countBySeverity(repo.findings)} />
-        </div>
       </div>
+
+      {score && (
+        <div className="card flex flex-wrap items-center gap-6 p-4">
+          <div>
+            <div className="text-xs text-slate-500">Bezpečnostní skóre</div>
+            <div className="mt-1">
+              <GradeBadge grade={score.grade} score={score.score} size="lg" />
+            </div>
+          </div>
+          <ul className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {score.categories.map((c) => (
+              <li key={c.category}>
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span>{CATEGORY_LABEL_CS[c.category]}</span>
+                  <span>{c.score}</span>
+                </div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full ${c.score >= 90 ? "bg-emerald-500" : c.score >= 60 ? "bg-amber-500" : "bg-red-600"}`}
+                    style={{ width: `${c.score}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="w-full">
+            <SeverityCounts counts={countBySeverity(active)} />
+          </div>
+        </div>
+      )}
 
       <div className="card flex flex-wrap items-start gap-3 p-4">
         <ActionForm action={scanRepo.bind(null, repo.id, "all")} label="Spustit kompletní sken" pendingLabel="Skenuji…" />
         <ActionForm action={scanRepo.bind(null, repo.id, "code")} label="Skenovat kód" pendingLabel="Skenuji kód…" variant="secondary" />
         <ActionForm action={scanRepo.bind(null, repo.id, "deps")} label="Zkontrolovat závislosti (CVE)" pendingLabel="Kontroluji…" variant="secondary" />
-        <a href={`/api/repos/${repo.id}/report`} className="btn-secondary">
-          Exportovat PDF
-        </a>
+        <details className="relative">
+          <summary className="btn-secondary cursor-pointer list-none">Export ▾</summary>
+          <div className="absolute z-10 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg">
+            <a href={`/api/repos/${repo.id}/report`} className="block px-3 py-1.5 hover:bg-slate-50">PDF report</a>
+            <a href={`/api/repos/${repo.id}/export?format=sarif`} className="block px-3 py-1.5 hover:bg-slate-50">SARIF (GitHub Code Scanning)</a>
+            <a href={`/api/repos/${repo.id}/export?format=json`} className="block px-3 py-1.5 hover:bg-slate-50">JSON</a>
+            <a href={`/api/repos/${repo.id}/export?format=md`} className="block px-3 py-1.5 hover:bg-slate-50">Markdown</a>
+          </div>
+        </details>
         <form action={disconnectRepo.bind(null, repo.id)} className="ml-auto">
           <button className="btn-danger">Odpojit</button>
         </form>
@@ -107,30 +180,41 @@ export default async function RepoDetail({
         ))}
       </nav>
 
-      {tab === "code" && (
-        <FindingList
-          findings={code}
-          scanned={Boolean(repo.lastCodeScanAt)}
-          emptyText="Ve zdrojovém kódu nebyla nalezena žádná slabá místa."
-          htmlUrl={repo.htmlUrl}
-          commitSha={repo.lastCommitSha}
-          previousScanEnd={previousScanEnd("code")}
-        />
+      {(tab === "code" || tab === "agent" || tab === "repo") && (
+        <FindingList findings={inTab(tab)} scanned={Boolean(repo.lastCodeScanAt)} emptyText={EMPTY_TEXT[tab]!} {...listProps(tab)} />
       )}
       {tab === "deps" && (
         <FindingList
-          findings={deps}
+          findings={inTab("deps")}
           scanned={Boolean(repo.lastDepScanAt)}
           emptyText={
             repo.dependencies.length > 0
               ? `Žádná ze závislostí (${repo.dependencies.length}) nemá známou zranitelnost.`
               : "V repozitáři nebyly nalezeny žádné podporované soubory závislostí (composer.json/.lock, package.json, package-lock.json, yarn.lock, requirements.txt)."
           }
-          htmlUrl={repo.htmlUrl}
-          commitSha={repo.lastCommitSha}
-          previousScanEnd={previousScanEnd("deps")}
+          {...listProps("deps")}
         />
       )}
+      {tab === "suppressed" &&
+        (suppressed.length === 0 ? (
+          <p className="card p-6 text-center text-slate-500">
+            Žádné potlačené nálezy. Nález, který jste ověřili jako falešně pozitivní nebo jehož riziko akceptujete, označte tlačítkem „Označit…“.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {sortFindings(suppressed).map((f) => (
+              <FindingCard
+                key={f.id}
+                finding={f}
+                htmlUrl={repo.htmlUrl}
+                commitSha={repo.lastCommitSha}
+                isNew={false}
+                aiEnabled={aiEnabled}
+                suppression={suppressionOf.get(f.fingerprint)}
+              />
+            ))}
+          </div>
+        ))}
       {tab === "inventory" && (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
@@ -172,11 +256,25 @@ export default async function RepoDetail({
           {repo.scans.map((s) => (
             <li key={s.id} className="flex flex-wrap justify-between gap-2 px-4 py-2">
               <span>
-                {s.kind === "code" ? "Sken kódu" : "Kontrola závislostí"} · {s.trigger === "cron" ? "automaticky" : "ručně"}
+                {s.kind === "code" ? "Sken kódu a nastavení" : "Kontrola závislostí"} · {s.trigger === "cron" ? "automaticky" : "ručně"}
               </span>
               <span className="text-slate-500">
                 {formatDateTime(s.startedAt)} ·{" "}
-                {s.status === "done" ? "dokončeno" : s.status === "running" ? "probíhá" : <span className="text-red-700">selhalo: {s.error}</span>}
+                {s.status === "done" ? (
+                  <>
+                    dokončeno
+                    {(s.newCount > 0 || s.resolvedCount > 0) && (
+                      <>
+                        {" "}· <span className="text-red-700">+{s.newCount} nových</span> ·{" "}
+                        <span className="text-emerald-700">−{s.resolvedCount} vyřešených</span>
+                      </>
+                    )}
+                  </>
+                ) : s.status === "running" ? (
+                  "probíhá"
+                ) : (
+                  <span className="text-red-700">selhalo: {s.error}</span>
+                )}
               </span>
             </li>
           ))}
@@ -211,13 +309,17 @@ function FindingList({
   htmlUrl,
   commitSha,
   previousScanEnd,
+  aiEnabled,
+  suppressionOf,
 }: {
-  findings: Awaited<ReturnType<typeof db.finding.findMany>>;
+  findings: Finding[];
   scanned: boolean;
   emptyText: string;
   htmlUrl: string;
   commitSha: string | null;
   previousScanEnd: Date | null;
+  aiEnabled: boolean;
+  suppressionOf: Map<string, Suppression>;
 }) {
   if (!scanned) return <p className="card p-6 text-center text-slate-500">Zatím neproběhl žádný sken. Spusťte ho tlačítkem výše.</p>;
   if (findings.length === 0) return <p className="card p-6 text-center text-emerald-700">✓ {emptyText}</p>;
@@ -229,7 +331,15 @@ function FindingList({
             {SEVERITY_LABEL_CS[group.severity]} závažnost <span className="text-slate-400">({group.items.length})</span>
           </h2>
           {group.items.map((f) => (
-            <FindingCard key={f.id} finding={f} htmlUrl={htmlUrl} commitSha={commitSha} isNew={isNewFinding(f.firstSeenAt, previousScanEnd)} />
+            <FindingCard
+              key={f.id}
+              finding={f}
+              htmlUrl={htmlUrl}
+              commitSha={commitSha}
+              isNew={isNewFinding(f.firstSeenAt, previousScanEnd)}
+              aiEnabled={aiEnabled}
+              suppression={suppressionOf.get(f.fingerprint)}
+            />
           ))}
         </section>
       ))}

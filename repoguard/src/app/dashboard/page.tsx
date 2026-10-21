@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { countBySeverity, statusFor } from "@/lib/findings";
+import { countBySeverity, partitionSuppressed, statusFor } from "@/lib/findings";
+import { computeScore } from "@/lib/score";
 import { formatDateTime, plural } from "@/lib/format";
-import { SeverityCounts, StatusBadge } from "@/components/Badges";
+import { GradeBadge, SeverityCounts, StatusBadge } from "@/components/Badges";
 import { ActionForm } from "@/components/ActionForm";
 import { scanRepo } from "@/app/actions";
 
@@ -13,11 +14,23 @@ export default async function Dashboard() {
   const user = await requireUser();
   const repos = await db.repo.findMany({
     where: { userId: user.id },
-    include: { findings: { select: { severity: true, kind: true } } },
+    include: {
+      findings: { select: { severity: true, kind: true, ruleId: true, fingerprint: true } },
+      suppressions: { select: { fingerprint: true } },
+    },
     orderBy: { fullName: "asc" },
   });
 
-  const statuses = repos.map((r) => statusFor(r, r.findings));
+  const rows = repos.map((r) => {
+    const { active } = partitionSuppressed(r.findings, r.suppressions);
+    return {
+      repo: r,
+      active,
+      status: statusFor(r, active),
+      score: computeScore(active, { code: Boolean(r.lastCodeScanAt), deps: Boolean(r.lastDepScanAt) }),
+    };
+  });
+  const statuses = rows.map((r) => r.status);
   const summary = {
     critical: statuses.filter((s) => s === "critical").length,
     warnings: statuses.filter((s) => s === "warnings").length,
@@ -55,24 +68,27 @@ export default async function Dashboard() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {repos.map((repo, i) => {
-            const code = repo.findings.filter((f) => f.kind === "code");
-            const deps = repo.findings.filter((f) => f.kind === "dependency");
+          {rows.map(({ repo, active, status, score }) => {
+            const code = active.filter((f) => f.kind !== "dependency");
+            const deps = active.filter((f) => f.kind === "dependency");
             return (
               <li key={repo.id} className="card flex flex-wrap items-center justify-between gap-4 p-4">
+                <div className="flex min-w-0 items-center gap-4">
+                {score && <GradeBadge grade={score.grade} score={score.score} />}
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={statuses[i]} />
+                    <StatusBadge status={status} />
                     <Link href={`/repos/${repo.id}`} className="truncate font-semibold hover:underline">
                       {repo.fullName}
                     </Link>
                     {repo.isPrivate && <span className="rounded border border-slate-300 px-1.5 text-xs text-slate-500">soukromý</span>}
                   </div>
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-                    <span>Kód: {plural(code.length, "nález", "nálezy", "nálezů")} · {formatDateTime(repo.lastCodeScanAt)}</span>
+                    <span>Kód a konfigurace: {plural(code.length, "nález", "nálezy", "nálezů")} · {formatDateTime(repo.lastCodeScanAt)}</span>
                     <span>Závislosti: {plural(deps.length, "zranitelnost", "zranitelnosti", "zranitelností")} · {formatDateTime(repo.lastDepScanAt)}</span>
                   </div>
-                  <SeverityCounts counts={countBySeverity(repo.findings)} />
+                  <SeverityCounts counts={countBySeverity(active)} />
+                </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <ActionForm action={scanRepo.bind(null, repo.id, "all")} label="Skenovat" pendingLabel="Skenuji…" variant="secondary" className="text-right" />

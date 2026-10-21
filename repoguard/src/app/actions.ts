@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getRepoById, hasScanAccess } from "@/lib/github";
+import { getFileContent, getRepoById, hasScanAccess } from "@/lib/github";
+import { AiReviewError, aiReviewEnabled, reviewFinding } from "@/lib/ai-review";
 import { requireUser, tokenFor } from "@/lib/session";
 import { runScan, type ScanKind } from "@/lib/scan";
 import { plural } from "@/lib/format";
@@ -61,6 +62,7 @@ export async function scanRepo(repoId: string, kind: ScanKind, _prev: ActionStat
     if (r.filesScanned !== undefined) {
       parts.push(`Kód: ${plural(r.filesScanned, "soubor", "soubory", "souborů")}, ${plural(r.codeFindings ?? 0, "nález", "nálezy", "nálezů")}.`);
     }
+    if (r.repoFindings !== undefined) parts.push(`Nastavení repozitáře: ${plural(r.repoFindings, "doporučení", "doporučení", "doporučení")}.`);
     if (r.dependencies !== undefined) {
       parts.push(
         `Závislosti: ${plural(r.dependencies, "balíček", "balíčky", "balíčků")}, ${plural(r.dependencyFindings ?? 0, "zranitelnost", "zranitelnosti", "zranitelností")}.`,
@@ -68,7 +70,8 @@ export async function scanRepo(repoId: string, kind: ScanKind, _prev: ActionStat
     }
     revalidatePath(`/repos/${repoId}`);
     revalidatePath("/dashboard");
-    return { ok: true, message: `Sken dokončen. ${parts.join(" ")}` };
+    const diff = r.newCount || r.resolvedCount ? ` Nové: ${r.newCount ?? 0}, vyřešené: ${r.resolvedCount ?? 0}.` : "";
+    return { ok: true, message: `Sken dokončen. ${parts.join(" ")}${diff}` };
   } catch (err) {
     revalidatePath(`/repos/${repoId}`);
     return { ok: false, message: `Sken selhal: ${errorMessage(err)}` };
@@ -83,4 +86,54 @@ export async function saveExcludes(repoId: string, _prev: ActionState, formData:
   if (updated.count === 0) return { ok: false, message: "Repozitář nebyl nalezen." };
   revalidatePath(`/repos/${repoId}`);
   return { ok: true, message: "Nastavení uloženo. Projeví se při příštím skenu." };
+}
+
+const SUPPRESSION_STATUSES = ["false_positive", "accepted_risk"];
+
+export async function suppressFinding(repoId: string, fingerprint: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const status = String(formData.get("status") ?? "");
+  const note = String(formData.get("note") ?? "").trim().slice(0, 500);
+  if (!SUPPRESSION_STATUSES.includes(status)) return { ok: false, message: "Vyberte důvod." };
+  const finding = await db.finding.findFirst({ where: { repoId, fingerprint, repo: { userId: user.id } } });
+  if (!finding) return { ok: false, message: "Nález nebyl nalezen." };
+  await db.suppression.upsert({
+    where: { repoId_fingerprint: { repoId, fingerprint } },
+    create: { repoId, fingerprint, status, note },
+    update: { status, note },
+  });
+  revalidatePath(`/repos/${repoId}`);
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Nález byl označen a nezapočítává se do skóre." };
+}
+
+export async function restoreFinding(repoId: string, fingerprint: string): Promise<void> {
+  const user = await requireUser();
+  await db.suppression.deleteMany({ where: { repoId, fingerprint, repo: { userId: user.id } } });
+  revalidatePath(`/repos/${repoId}`);
+  revalidatePath("/dashboard");
+}
+
+export async function aiReviewFinding(findingId: string, _prev: ActionState): Promise<ActionState> {
+  const user = await requireUser();
+  if (!aiReviewEnabled()) return { ok: false, message: "AI posouzení není zapnuté (AI_REVIEW_ENABLED)." };
+  const finding = await db.finding.findFirst({ where: { id: findingId, repo: { userId: user.id } }, include: { repo: true } });
+  if (!finding) return { ok: false, message: "Nález nebyl nalezen." };
+
+  try {
+    let content: string | null = null;
+    if (finding.kind === "code" && finding.file && finding.repo.lastCommitSha) {
+      const token = tokenFor(user);
+      // Re-check access before reading the file, as for scans.
+      const remote = await getRepoById(token, finding.repo.githubId);
+      if (!hasScanAccess(remote, user.login)) return { ok: false, message: "K repozitáři už nemáte přístup." };
+      content = await getFileContent(token, remote.full_name, finding.file, finding.repo.lastCommitSha);
+    }
+    const review = await reviewFinding(finding, content);
+    await db.finding.update({ where: { id: finding.id }, data: { aiReview: JSON.stringify(review), aiReviewedAt: new Date() } });
+  } catch (err) {
+    return { ok: false, message: err instanceof AiReviewError ? err.message : errorMessage(err) };
+  }
+  revalidatePath(`/repos/${finding.repoId}`);
+  return { ok: true, message: "AI posouzení je hotové." };
 }

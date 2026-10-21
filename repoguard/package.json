@@ -17,6 +17,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.0.0",
     "@prisma/adapter-better-sqlite3": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@react-pdf/renderer": "^4.9.0",

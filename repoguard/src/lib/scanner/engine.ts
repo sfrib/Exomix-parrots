@@ -23,8 +23,15 @@ export function maskSecret(text: string, secret: string): string {
   return text.split(secret).join(`${visible}${"*".repeat(8)}`);
 }
 
+// Zero-width, bidi-control and Unicode tag characters are made visible in snippets.
+const INVISIBLE = /[\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|\uDB40[\uDC00-\uDC7F]/g;
+
+function revealInvisible(text: string): string {
+  return text.replace(INVISIBLE, (ch) => `⟦U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}⟧`);
+}
+
 function snippetFor(ctx: FileContext, match: RuleMatch): string {
-  let text = (ctx.lines[match.line - 1] ?? "").trim();
+  let text = revealInvisible((ctx.lines[match.line - 1] ?? "").trim());
   if (match.secret) text = maskSecret(text, match.secret);
   return text.length > MAX_SNIPPET ? `${text.slice(0, MAX_SNIPPET)}…` : text;
 }
@@ -73,6 +80,25 @@ export function scanFile(file: SourceFile, rules: Rule[] = ALL_RULES): CodeFindi
     }
   }
   return dedupeSecrets(findings);
+}
+
+/**
+ * Masks every secret the secret rules recognise in `text`. Used before any code
+ * leaves the server (AI review), so keys never reach a third party.
+ */
+export function redactSecrets(text: string, language: SourceFile["language"] = "config"): string {
+  const ctx = buildContext({ path: "context", content: text, language });
+  let out = text;
+  for (const rule of ALL_RULES) {
+    if (!rule.id.startsWith(SECRET_RULE_PREFIX) || isFileRule(rule)) continue;
+    ctx.lines.forEach((line) => {
+      const m = line.match(rule.pattern);
+      if (!m) return;
+      const refined = rule.refine ? rule.refine(line, m) : { secret: m[0] };
+      if (refined?.secret) out = maskSecret(out, refined.secret);
+    });
+  }
+  return out;
 }
 
 /** Several secret rules can hit the same line; keep only the most severe one. */

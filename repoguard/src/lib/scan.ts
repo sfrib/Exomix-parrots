@@ -1,9 +1,17 @@
 import { createHash } from "node:crypto";
 import { db } from "./db";
 import { tokenFor } from "./session";
-import { downloadRepoFiles, getHeadSha, getRepoById, hasScanAccess } from "./github";
+import {
+  downloadRepoFiles,
+  getDependabotAlertsEnabled,
+  getHeadSha,
+  getRepoById,
+  hasScanAccess,
+  isBranchProtected,
+} from "./github";
 import { scanFiles } from "./scanner/engine";
-import { MAX_FILE_BYTES, detectLanguage, isExcluded, parseExcludes } from "./scanner/files";
+import { MAX_FILE_BYTES, detectLanguage, isExcluded, isPostureFile, parseExcludes } from "./scanner/files";
+import { checkPosture } from "./posture";
 import type { SourceFile } from "./scanner/types";
 import { isManifest, parseManifests, type Ecosystem, type ParsedDependency } from "./deps/parsers";
 import { checkDependencies, type AdvisoryCache, type DependencyVulnerability, type OsvVulnerability } from "./deps/osv";
@@ -73,16 +81,45 @@ function depFingerprint(v: DependencyVulnerability): string {
   return sha1(`${d.ecosystem}|${d.name}|${d.version}|${v.advisoryId}`);
 }
 
-async function previousFirstSeen(repoId: string, kind: string): Promise<Map<string, Date>> {
-  const rows = await db.finding.findMany({ where: { repoId, kind }, select: { fingerprint: true, firstSeenAt: true } });
-  return new Map(rows.map((r) => [r.fingerprint, r.firstSeenAt]));
+interface CarriedState {
+  firstSeenAt: Date;
+  aiReview: string | null;
+  aiReviewedAt: Date | null;
+}
+
+/** State that survives re-scans, keyed by fingerprint. */
+async function previousState(repoId: string, kinds: string[]): Promise<Map<string, CarriedState>> {
+  const rows = await db.finding.findMany({
+    where: { repoId, kind: { in: kinds } },
+    select: { fingerprint: true, firstSeenAt: true, aiReview: true, aiReviewedAt: true },
+  });
+  return new Map(rows.map((r) => [r.fingerprint, { firstSeenAt: r.firstSeenAt, aiReview: r.aiReview, aiReviewedAt: r.aiReviewedAt }]));
+}
+
+function carried(prev: Map<string, CarriedState>, fingerprint: string, now: Date) {
+  const p = prev.get(fingerprint);
+  return { firstSeenAt: p?.firstSeenAt ?? now, aiReview: p?.aiReview ?? null, aiReviewedAt: p?.aiReviewedAt ?? null };
+}
+
+/** New/resolved counts against the previous scan; zero for the very first scan of a kind. */
+async function diffCounts(repoId: string, kind: "code" | "deps", prev: Map<string, CarriedState>, next: string[]) {
+  const earlier = await db.scan.count({ where: { repoId, kind, status: "done" } });
+  if (earlier === 0) return { newCount: 0, resolvedCount: 0 };
+  const nextSet = new Set(next);
+  return {
+    newCount: [...nextSet].filter((f) => !prev.has(f)).length,
+    resolvedCount: [...prev.keys()].filter((f) => !nextSet.has(f)).length,
+  };
 }
 
 export interface ScanResult {
   codeFindings?: number;
+  repoFindings?: number;
   dependencyFindings?: number;
   dependencies?: number;
   filesScanned?: number;
+  newCount?: number;
+  resolvedCount?: number;
 }
 
 /**
@@ -103,6 +140,7 @@ export async function runScan(repoId: string, userId: string, kind: ScanKind, tr
   const scans = await Promise.all(
     kinds.map((k) => db.scan.create({ data: { repoId, kind: k, status: "running", trigger } })),
   );
+  const scanId = (k: "code" | "deps") => scans.find((s) => s.kind === k)!.id;
 
   try {
     const remote = await getRepoById(token, repo.githubId);
@@ -117,98 +155,129 @@ export async function runScan(repoId: string, userId: string, kind: ScanKind, tr
     const files = await downloadRepoFiles(token, remote.full_name, sha, (path, size) => {
       if (wantDeps && isManifest(path) && !isExcluded(path, excludes)) return true;
       if (!wantCode || size > MAX_FILE_BYTES || isExcluded(path, excludes)) return false;
-      return detectLanguage(path) !== null;
+      return isPostureFile(path) || detectLanguage(path) !== null;
     });
 
     const result: ScanResult = {};
     const now = new Date();
 
     if (wantCode) {
-      const sources: SourceFile[] = files
-        .map((f) => ({ ...f, language: detectLanguage(f.path)! }))
-        .filter((f) => f.language !== null);
+      const sources: SourceFile[] = files.flatMap((f) => {
+        const language = detectLanguage(f.path);
+        return language ? [{ ...f, language }] : [];
+      });
       const findings = scanFiles(sources);
-      const firstSeen = await previousFirstSeen(repoId, "code");
+      const [dependabotAlerts, branchProtected] = await Promise.all([
+        getDependabotAlertsEnabled(token, remote.full_name),
+        isBranchProtected(token, remote.full_name, remote.default_branch),
+      ]);
+      const posture = checkPosture({
+        repo: remote,
+        files: files.filter((f) => isPostureFile(f.path)),
+        dependabotAlerts,
+        branchProtected,
+        usesEnvFiles: sources.some((f) => /getenv\(|process\.env|\$_ENV|dotenv|os\.environ/.test(f.content)),
+      });
+
+      const prev = await previousState(repoId, ["code", "repo"]);
+      const codeRows = findings.map((f) => {
+        const fingerprint = codeFingerprint(f);
+        return {
+          repoId,
+          kind: "code",
+          fingerprint,
+          ruleId: f.ruleId,
+          severity: f.severity,
+          title: f.title,
+          cwe: f.cwe ?? null,
+          file: f.file,
+          line: f.line,
+          snippet: f.snippet,
+          explanation: f.explanation,
+          fix: f.fix,
+          ...carried(prev, fingerprint, now),
+        };
+      });
+      const repoRows = posture.map((p) => {
+        const fingerprint = sha1(`repo|${p.ruleId}`);
+        return {
+          repoId,
+          kind: "repo",
+          fingerprint,
+          ruleId: p.ruleId,
+          severity: p.severity,
+          title: p.title,
+          file: p.file,
+          explanation: p.explanation,
+          fix: p.fix,
+          ...carried(prev, fingerprint, now),
+        };
+      });
+      const counts = await diffCounts(repoId, "code", prev, [...codeRows, ...repoRows].map((r) => r.fingerprint));
       await db.$transaction([
-        db.finding.deleteMany({ where: { repoId, kind: "code" } }),
-        db.finding.createMany({
-          data: findings.map((f) => {
-            const fingerprint = codeFingerprint(f);
-            return {
-              repoId,
-              kind: "code",
-              fingerprint,
-              ruleId: f.ruleId,
-              severity: f.severity,
-              title: f.title,
-              cwe: f.cwe ?? null,
-              file: f.file,
-              line: f.line,
-              snippet: f.snippet,
-              explanation: f.explanation,
-              fix: f.fix,
-              firstSeenAt: firstSeen.get(fingerprint) ?? now,
-            };
-          }),
-        }),
+        db.finding.deleteMany({ where: { repoId, kind: { in: ["code", "repo"] } } }),
+        db.finding.createMany({ data: [...codeRows, ...repoRows] }),
         db.scan.update({
-          where: { id: scans.find((s) => s.kind === "code")!.id },
-          data: { status: "done", finishedAt: new Date(), commitSha: sha, filesScanned: sources.length },
+          where: { id: scanId("code") },
+          data: { status: "done", finishedAt: new Date(), commitSha: sha, filesScanned: sources.length, ...counts },
         }),
       ]);
-      result.codeFindings = findings.length;
+      result.codeFindings = codeRows.length;
+      result.repoFindings = repoRows.length;
       result.filesScanned = sources.length;
+      result.newCount = counts.newCount;
+      result.resolvedCount = counts.resolvedCount;
     }
 
     if (wantDeps) {
       const manifests = files.filter((f) => isManifest(f.path));
       const deps: ParsedDependency[] = parseManifests(manifests);
       const vulns = await checkDependencies(deps, { cache: advisoryCache });
-      const firstSeen = await previousFirstSeen(repoId, "dependency");
+      const prev = await previousState(repoId, ["dependency"]);
+      const rows = vulns.map((v) => {
+        const fingerprint = depFingerprint(v);
+        const { explanation, fix } = describeDependencyRisk(v);
+        const cve = v.aliases.find((a) => a.startsWith("CVE-"));
+        return {
+          repoId,
+          kind: "dependency",
+          fingerprint,
+          ruleId: `dep.${v.dependency.ecosystem.toLowerCase()}`,
+          severity: v.severity,
+          title: `${v.dependency.name} ${v.dependency.version} – ${cve ?? v.advisoryId}`,
+          cwe: v.cwe,
+          file: v.dependency.manifest,
+          line: null,
+          snippet: null,
+          explanation,
+          fix,
+          packageName: v.dependency.name,
+          ecosystem: v.dependency.ecosystem,
+          installedVersion: v.dependency.version,
+          fixedVersion: v.fixedVersion,
+          advisoryId: v.advisoryId,
+          aliases: v.aliases.join(", "),
+          cvssScore: v.cvssScore,
+          cvssVector: v.cvssVector,
+          referenceUrl: v.referenceUrl,
+          ...carried(prev, fingerprint, now),
+        };
+      });
+      const counts = await diffCounts(repoId, "deps", prev, rows.map((r) => r.fingerprint));
       await db.$transaction([
         db.finding.deleteMany({ where: { repoId, kind: "dependency" } }),
         db.dependency.deleteMany({ where: { repoId } }),
-        db.dependency.createMany({
-          data: deps.map((d) => ({ repoId, ...d })),
-        }),
-        db.finding.createMany({
-          data: vulns.map((v) => {
-            const fingerprint = depFingerprint(v);
-            const { explanation, fix } = describeDependencyRisk(v);
-            const cve = v.aliases.find((a) => a.startsWith("CVE-"));
-            return {
-              repoId,
-              kind: "dependency",
-              fingerprint,
-              ruleId: `dep.${v.dependency.ecosystem.toLowerCase()}`,
-              severity: v.severity,
-              title: `${v.dependency.name} ${v.dependency.version} – ${cve ?? v.advisoryId}`,
-              cwe: v.cwe,
-              file: v.dependency.manifest,
-              line: null,
-              snippet: null,
-              explanation,
-              fix,
-              packageName: v.dependency.name,
-              ecosystem: v.dependency.ecosystem,
-              installedVersion: v.dependency.version,
-              fixedVersion: v.fixedVersion,
-              advisoryId: v.advisoryId,
-              aliases: v.aliases.join(", "),
-              cvssScore: v.cvssScore,
-              cvssVector: v.cvssVector,
-              referenceUrl: v.referenceUrl,
-              firstSeenAt: firstSeen.get(fingerprint) ?? now,
-            };
-          }),
-        }),
+        db.dependency.createMany({ data: deps.map((d) => ({ repoId, ...d })) }),
+        db.finding.createMany({ data: rows }),
         db.scan.update({
-          where: { id: scans.find((s) => s.kind === "deps")!.id },
-          data: { status: "done", finishedAt: new Date(), commitSha: sha, filesScanned: manifests.length },
+          where: { id: scanId("deps") },
+          data: { status: "done", finishedAt: new Date(), commitSha: sha, filesScanned: manifests.length, ...counts },
         }),
       ]);
-      result.dependencyFindings = vulns.length;
+      result.dependencyFindings = rows.length;
       result.dependencies = deps.length;
+      result.newCount = (result.newCount ?? 0) + counts.newCount;
+      result.resolvedCount = (result.resolvedCount ?? 0) + counts.resolvedCount;
     }
 
     await db.repo.update({

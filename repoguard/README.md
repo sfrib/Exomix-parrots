@@ -1,6 +1,17 @@
 # RepoGuard
 
-A defensive security scanner for **your own** GitHub repositories. It finds common weaknesses in PHP/WordPress and JavaScript/TypeScript code and alerts you when a dependency has a known vulnerability (CVE). The UI is in Czech.
+A defensive security scanner for **your own** GitHub repositories. It finds common weaknesses in PHP/WordPress and JavaScript/TypeScript code, audits AI coding-agent configuration (Claude Code, MCP, Cursor) and GitHub Actions, checks repository security settings, and alerts you when a dependency has a known vulnerability (CVE). The UI is in Czech.
+
+Main features:
+
+- **Code scan:** SQL injection, XSS / unsanitised input, missing authorisation, insecure uploads, hardcoded secrets and dangerous functions, each with CWE, file:line, a plain-language explanation and a fix.
+- **AI agent & CI audit:** inspired by [AgentShield](https://github.com/affaan-m/agentshield) from *Everything Claude Code*. Checks `.claude/settings.json` permissions and hooks, `.mcp.json` servers, `CLAUDE.md` / `AGENTS.md` / Cursor rules for hidden prompt injection, VS Code auto-run tasks, and risky GitHub Actions patterns.
+- **Dependency CVEs** via OSV.dev, with CVSS score, fixed version and upgrade command.
+- **Repository settings:** Dependabot alerts, secret scanning, branch protection, `SECURITY.md`, dependency update config, `.env` in `.gitignore`.
+- **Security score 0–100 and grade A–F** per category.
+- **Triage:** mark findings as false positive or accepted risk (kept across scans). History shows new and resolved findings per scan.
+- **Exports:** PDF, SARIF 2.1.0 (upload to GitHub Code Scanning), JSON, Markdown.
+- **Optional AI review** of a single finding with Claude: verdict (true / false positive), reasoning and a proposed patch. Defender/auditor role only.
 
 RepoGuard only **reports and explains** issues. It never generates or runs exploit code, and it only scans repositories the signed-in user owns or has been granted access to.
 
@@ -12,6 +23,7 @@ RepoGuard only **reports and explains** issues. It never generates or runs explo
 | Auth | NextAuth (Auth.js v4) with GitHub OAuth, JWT sessions | Mature GitHub provider. The GitHub token is stored AES-256-GCM encrypted in the DB and never sent to the browser |
 | DB | Prisma 7 + SQLite (`better-sqlite3` adapter) | Zero setup locally. Switch to Postgres by changing the provider and adapter |
 | Code scanning | Built-in rule engine (`src/lib/scanner`) | Runs in memory on the downloaded tarball. Nothing is written to disk or executed |
+| AI review (optional) | `@anthropic-ai/sdk`, `claude-opus-5-5`, structured output | Off by default; secrets are masked before sending |
 | CVE data | [OSV.dev](https://osv.dev) batch API | Free, no API key, covers Packagist, npm and PyPI. Includes GitHub Advisory Database data |
 | PDF | `@react-pdf/renderer` + DejaVu fonts | Server-side rendering with full Czech diacritics |
 | Styling | Tailwind CSS 4 | |
@@ -29,18 +41,23 @@ repoguard/
 │  │  └─ api/
 │  │     ├─ auth/[...nextauth]/  # GitHub OAuth
 │  │     ├─ repos/[id]/report/   # PDF export
+│  │     ├─ repos/[id]/export/   # ?format=sarif|json|md
 │  │     └─ cron/                # scheduled re-check (Bearer CRON_SECRET)
 │  ├─ components/
 │  └─ lib/
 │     ├─ scanner/
 │     │  ├─ engine.ts            # runs rules, comment stripping, secret masking, suppression
 │     │  ├─ files.ts             # language detection, default excludes
-│     │  └─ rules/{php,js,secrets}.ts
+│     │  └─ rules/{php,js,secrets,agent}.ts   # agent.ts = AI agent config + GitHub Actions
 │     ├─ deps/
 │     │  ├─ parsers.ts           # composer.json/.lock, package.json/-lock, yarn.lock, requirements.txt
 │     │  ├─ osv.ts               # OSV batch query, fixed-version detection
 │     │  └─ cvss.ts              # CVSS v3.x base score calculator
-│     ├─ github.ts               # repo listing, access check, tarball download
+│     ├─ github.ts               # repo listing, access check, tarball download, settings
+│     ├─ posture.ts              # repository security settings checks
+│     ├─ score.ts                # 0–100 score and A–F grade per category
+│     ├─ export.ts               # SARIF / JSON / Markdown
+│     ├─ ai-review.ts            # optional Claude review of a finding
 │     ├─ scan.ts                 # orchestrates a scan and stores results
 │     └─ report.tsx              # PDF document
 └─ tests/                        # vitest: rules (vulnerable vs safe fixtures), parsers, OSV, CVSS, access
@@ -88,6 +105,9 @@ Requirements: Node.js 20+.
 | `ALLOWED_GITHUB_LOGINS` | recommended | Comma-separated logins allowed to sign in |
 | `TOKEN_ENCRYPTION_KEY` | optional | Separate key for encrypting stored GitHub tokens |
 | `CRON_SECRET` | optional | Enables `/api/cron` |
+| `AI_REVIEW_ENABLED` | optional | `true` shows the "Posoudit pomocí AI" button |
+| `ANTHROPIC_API_KEY` | with AI review | Claude API key |
+| `AI_REVIEW_MODEL` | optional | Default `claude-opus-5-5` |
 | `GITHUB_OAUTH_SCOPE` | optional | Default `read:user repo` (needed for private repos). Use `read:user` for public repos only |
 
 ## Scheduled CVE checks
@@ -114,6 +134,22 @@ On Vercel, add a cron job in `vercel.json` (`{"crons":[{"path":"/api/cron","sche
 | Hardcoded secrets | `DB_PASSWORD` / salts in `wp-config.php`, AWS/GitHub/Stripe/Slack/Google/SendGrid keys, private keys, connection strings, committed `.env` | 798, 538 |
 | Dangerous functions | `eval`, `create_function`, `preg_replace /e`, `exec`/`system`/`shell_exec`, `unserialize`, dynamic `include`, `child_process.exec` | 95, 78, 502, 98 |
 | Other | open redirects, disabled TLS verification, md5/sha1 passwords, weak randomness for tokens, `phpinfo`/display_errors, JWT `none`, CORS `*` with credentials | 601, 295, 916, 338, 209, 347, 942 |
+
+**AI agents and CI** (category *AI agenti a CI*):
+
+| Area | Examples | CWE |
+| --- | --- | --- |
+| Agent permissions | `bypassPermissions` / `--dangerously-skip-permissions`, `Bash(*)` / `Write(*)`, auto-allowed `rm -rf`, `git push --force`, `curl`; no deny rule for `.env`; committed `settings.local.json` | 250, 732, 200 |
+| Hooks | `curl … \| bash`, reverse-shell patterns, reading `~/.ssh` / `~/.aws` or POSTing data out, history wiping, global installs, `\|\| true` in PreToolUse | 494, 506, 522 |
+| MCP servers | `npx -y` without a pinned version, tokens hardcoded in `env`, plain-HTTP / `0.0.0.0`, access to `/` or key files, `sh -c` wrappers | 1357, 798, 319, 552 |
+| Instruction files | hidden zero-width / bidi / tag Unicode, "ignore previous instructions", "without asking", fetch-and-run, "don't report security warnings", HTML comments with directives, base64 blobs, subagents without a `tools:` list | 1427, 1007 |
+| VS Code / Actions | `runOn: folderOpen` tasks, `pull_request_target` + PR head checkout, `${{ github.event…title }}` in `run:`, `permissions: write-all`, third-party actions on `@main` | 506, 829, 78, 250 |
+
+**Score.** Each category (code, secrets, AI agents & CI, dependencies, repository settings) starts at 100. Each active finding deducts points: critical 25, high 15, medium 5, low 2. The overall score is the average: A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, F below. Suppressed findings don't count.
+
+**AI review** (`AI_REVIEW_ENABLED=true`). It runs per finding and only on click. RepoGuard fetches the file at the scanned commit with your token, masks every secret it can detect, and sends about 80 lines around the finding to the Claude API. It returns a verdict, reasoning in Czech, fix steps and an optional unified-diff patch. The system prompt forbids exploit code and payloads; there is deliberately no "attacker" agent. Server-side refusal fallback (`fallbacks: "default"`) is enabled. Reviews are kept across re-scans by fingerprint.
+
+**SARIF.** Download it from *Export → SARIF* and upload it with `github/codeql-action/upload-sarif`, so findings appear in the repo's *Security → Code scanning* tab. Suppressed findings are marked as suppressions. Repository-settings findings have no file location and are left out.
 
 - Comments are ignored (except for secret detection). Secrets are **masked** in the DB, UI and PDF.
 - `node_modules/`, `vendor/`, `wp-admin/`, `wp-includes/`, build output and minified files are skipped. You can add your own path prefixes per repo (e.g. third-party plugins under `wp-content/plugins/…`).

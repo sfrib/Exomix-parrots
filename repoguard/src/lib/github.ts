@@ -19,6 +19,8 @@ export interface GitHubRepo {
   language: string | null;
   owner: { login: string };
   permissions?: { admin?: boolean; maintain?: boolean; push?: boolean; triage?: boolean; pull?: boolean };
+  /** Only returned to admins. */
+  security_and_analysis?: Record<string, { status?: "enabled" | "disabled" } | undefined>;
 }
 
 export class GitHubError extends Error {
@@ -81,6 +83,34 @@ export async function getRepoById(token: string, githubId: number): Promise<GitH
 export async function getHeadSha(token: string, fullName: string, ref: string): Promise<string> {
   const res = await gh(token, `/repos/${fullName}/commits/${encodeURIComponent(ref)}`, "application/vnd.github.sha");
   return (await res.text()).trim();
+}
+
+/** Dependabot alerts: true/false, or null when the token cannot tell (needs admin). */
+export async function getDependabotAlertsEnabled(token: string, fullName: string): Promise<boolean | null> {
+  try {
+    await gh(token, `/repos/${fullName}/vulnerability-alerts`);
+    return true;
+  } catch (err) {
+    if (err instanceof GitHubError && err.status === 404) return false;
+    return null;
+  }
+}
+
+export async function isBranchProtected(token: string, fullName: string, branch: string): Promise<boolean | null> {
+  try {
+    const res = await gh(token, `/repos/${fullName}/branches/${encodeURIComponent(branch)}`);
+    const data = (await res.json()) as { protected?: boolean };
+    return typeof data.protected === "boolean" ? data.protected : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Raw content of one file at a commit, used for AI review context. */
+export async function getFileContent(token: string, fullName: string, path: string, ref: string): Promise<string> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  const res = await gh(token, `/repos/${fullName}/contents/${encoded}?ref=${encodeURIComponent(ref)}`, "application/vnd.github.raw+json");
+  return res.text();
 }
 
 export interface DownloadedFile {

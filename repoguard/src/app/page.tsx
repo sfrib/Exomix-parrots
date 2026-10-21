@@ -24,10 +24,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
       <div className="mt-8">
         <SignInButton />
       </div>
-      <ul className="mt-12 grid gap-4 text-left sm:grid-cols-3">
+      <ul className="mt-12 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
         {[
           ["Analýza kódu", "SQL injection, XSS, chybějící kontrola oprávnění, nahrávání souborů, uložená hesla a nebezpečné funkce – s vysvětlením a návrhem opravy."],
           ["Hlídání CVE", "Kontrola composer, npm a Python závislostí proti databázi OSV.dev včetně skóre CVSS a opravené verze."],
+          ["AI agenti a CI", "Audit CLAUDE.md, .claude/, MCP serverů, pravidel Cursoru a GitHub Actions: skryté pokyny (prompt injection), nebezpečná oprávnění, hooky, nepřipnuté balíčky."],
+          ["Skóre A–F a triáž", "Bezpečnostní skóre po oblastech, označení falešných poplachů, historie nových a vyřešených nálezů, export do PDF, SARIF, JSON a Markdownu."],
+          ["Volitelné AI posouzení", "Claude posoudí konkrétní nález v kontextu kódu a navrhne opravu. Jen obrana – žádný útočný kód. Tajné klíče se před odesláním maskují."],
           ["Jen vaše repozitáře", "Skenovat lze pouze repozitáře, které vlastníte nebo k nimž máte udělený přístup. Kód se nikam neukládá."],
         ].map(([title, text]) => (
           <li key={title} className="card p-4">
