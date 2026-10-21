@@ -39,6 +39,7 @@ model Repo {
   findings       Finding[]
   dependencies   Dependency[]
   suppressions   Suppression[]
+  threatModels   ThreatModel[]
 
   @@unique([userId, githubId])
 }
@@ -95,6 +96,27 @@ model Finding {
   createdAt        DateTime @default(now())
 
   @@index([repoId, kind])
+}
+
+/** AI attack-scenario analysis (threat model): modeler → defender → auditor. JSON per stage. */
+model ThreatModel {
+  id         String    @id @default(cuid())
+  repoId     String
+  repo       Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  status     String // "running" | "done" | "failed"
+  stage      String    @default("scenarios") // stage currently running
+  model      String
+  commitSha  String?
+  // Finding references given to the model (F1, F2… → fingerprint, title, location)
+  inputs     String    @default("[]")
+  scenarios  String?
+  defenses   String?
+  audit      String?
+  error      String?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([repoId, createdAt])
 }
 
 /** Triage decision for a finding, matched by fingerprint so it survives re-scans. */

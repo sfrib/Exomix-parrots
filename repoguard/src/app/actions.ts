@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getFileContent, getRepoById, hasScanAccess } from "@/lib/github";
 import { AiReviewError, aiReviewEnabled, reviewFinding } from "@/lib/ai-review";
+import { createThreatModel, executeThreatModel } from "@/lib/threat-run";
 import { requireUser, tokenFor } from "@/lib/session";
 import { runScan, type ScanKind } from "@/lib/scan";
 import { plural } from "@/lib/format";
@@ -136,4 +138,18 @@ export async function aiReviewFinding(findingId: string, _prev: ActionState): Pr
   }
   revalidatePath(`/repos/${finding.repoId}`);
   return { ok: true, message: "AI posouzení je hotové." };
+}
+
+export async function startThreatModel(repoId: string, _prev: ActionState): Promise<ActionState> {
+  const user = await requireUser();
+  if (!aiReviewEnabled()) return { ok: false, message: "AI funkce nejsou zapnuté (AI_REVIEW_ENABLED)." };
+  try {
+    const tm = await createThreatModel(repoId, user.id);
+    // Runs after the response is sent; the page polls until it finishes.
+    after(() => executeThreatModel(tm.id));
+  } catch (err) {
+    return { ok: false, message: errorMessage(err) };
+  }
+  revalidatePath(`/repos/${repoId}`);
+  return { ok: true, message: "Analýza byla spuštěna. Obvykle trvá několik minut." };
 }

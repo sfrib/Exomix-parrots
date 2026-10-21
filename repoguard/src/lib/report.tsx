@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import type { Finding, Repo, Suppression } from "@/generated/prisma/client";
+import type { Finding, Repo, Suppression, ThreatModel } from "@/generated/prisma/client";
+import type { Audit, Defenses, Scenarios } from "./threat-model";
 import { countBySeverity, groupBySeverity, partitionSuppressed, sortFindings, statusFor, SUPPRESSION_LABEL_CS } from "./findings";
 import { CATEGORY_LABEL_CS, categoryOf, computeScore } from "./score";
 import { VERDICT_LABEL_CS, type AiReview } from "./ai-review";
@@ -33,7 +34,7 @@ const s = StyleSheet.create({
   badge: { color: "#ffffff", fontSize: 8, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 2, alignSelf: "flex-start" },
   snippet: { fontFamily: "DejaVuMono", fontSize: 7.5, backgroundColor: "#f1f5f9", padding: 4, marginTop: 4 },
   label: { fontWeight: "bold", marginTop: 4 },
-  footer: { position: "absolute", bottom: 20, left: 36, right: 36, fontSize: 7, color: "#94a3b8", flexDirection: "row", justifyContent: "space-between" },
+  footer: { position: "absolute", bottom: 20, left: 36, right: 36, fontSize: 7, color: "#94a3b8" },
 });
 
 function parseReview(json: string | null): AiReview | null {
@@ -102,7 +103,74 @@ function Section({ title, findings, empty }: { title: string; findings: Finding[
   );
 }
 
-export function renderReport(repo: Repo, allFindings: Finding[], suppressions: Suppression[]): Promise<Buffer> {
+function parseJson<T>(json: string | null): T | null {
+  try {
+    return json ? (JSON.parse(json) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function ThreatSection({ tm }: { tm: ThreatModel }) {
+  const audit = parseJson<Audit>(tm.audit);
+  const scenarios = parseJson<Scenarios>(tm.scenarios)?.scenarios ?? [];
+  const defenses = new Map((parseJson<Defenses>(tm.defenses)?.defenses ?? []).map((d) => [d.scenarioId, d]));
+  return (
+    // Own page: react-pdf crashes when this section is split mid-block across pages.
+    <View break>
+      <Text style={s.h2}>Útočné scénáře (AI analýza)</Text>
+      <Text style={s.muted}>
+        {formatDateTime(tm.finishedAt)} · {tm.model} · scénáře jsou popsané slovně, bez útočného kódu
+      </Text>
+      {audit ? (
+        <View style={{ marginTop: 4 }}>
+          <Text style={{ fontWeight: "bold" }}>
+            Riziko: {SEVERITY_LABEL_CS[audit.riskLevel]} · skóre auditu {audit.score}/100
+          </Text>
+          <Text>{audit.summary}</Text>
+          {audit.actionPlan.length ? <Text style={s.label}>Plán oprav</Text> : null}
+          {[...audit.actionPlan]
+            .sort((a, b) => a.priority - b.priority)
+            .map((a, i) => (
+              <Text key={i}>
+                {i + 1}. {a.action}
+              </Text>
+            ))}
+        </View>
+      ) : null}
+      {scenarios.map((sc) => {
+        const d = defenses.get(sc.id);
+        return (
+          <View key={sc.id} style={s.finding} wrap={false}>
+            <Text style={{ fontWeight: "bold" }}>
+              <Text style={{ color: COLORS[sc.severity] }}>[{SEVERITY_LABEL_CS[sc.severity]}]</Text> {sc.id} {sc.title}
+            </Text>
+            <Text style={s.muted}>
+              {sc.attacker} · vstup: {sc.entryPoint} · nálezy: {sc.relatedFindings.join(", ")}
+            </Text>
+            {sc.steps.map((st, i) => (
+              <Text key={i}>
+                {i + 1}. {st}
+              </Text>
+            ))}
+            <Text>Dopad: {sc.impact}</Text>
+            {d ? (
+              <View>
+                <Text style={s.label}>Obrana</Text>
+                {d.prevent.map((p, i) => (
+                  <Text key={i}>• {p}</Text>
+                ))}
+                <Text>Ověření: {d.verify}</Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+export function renderReport(repo: Repo, allFindings: Finding[], suppressions: Suppression[], threatModel?: ThreatModel | null): Promise<Buffer> {
   const { active: findings, suppressed } = partitionSuppressed(allFindings, suppressions);
   const counts = countBySeverity(findings);
   const score = computeScore(findings, { code: Boolean(repo.lastCodeScanAt), deps: Boolean(repo.lastDepScanAt) });
@@ -154,6 +222,8 @@ export function renderReport(repo: Repo, allFindings: Finding[], suppressions: S
         <Section title="Zranitelné závislosti (CVE)" findings={deps} empty="Žádné známé zranitelnosti." />
         <Section title="Nastavení repozitáře" findings={repoFindings} empty="Bez doporučení." />
 
+        {threatModel ? <ThreatSection tm={threatModel} /> : null}
+
         {suppressed.length ? (
           <View>
             <Text style={s.h2}>Potlačené nálezy</Text>
@@ -176,10 +246,10 @@ export function renderReport(repo: Repo, allFindings: Finding[], suppressions: S
           maskovány.
         </Text>
 
-        <View style={s.footer} fixed>
-          <Text>RepoGuard · {repo.fullName}</Text>
-          <Text render={({ pageNumber, totalPages }) => `Strana ${pageNumber} / ${totalPages}`} />
-        </View>
+        {/* Static footer only: dynamic `render` page numbers crash react-pdf 4.x layout on longer reports. */}
+        <Text style={s.footer} fixed>
+          RepoGuard · {repo.fullName} · {generated}
+        </Text>
       </Page>
     </Document>
   );

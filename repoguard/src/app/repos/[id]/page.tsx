@@ -12,17 +12,19 @@ import { aiReviewEnabled } from "@/lib/ai-review";
 import { GradeBadge, SeverityCounts, StatusBadge } from "@/components/Badges";
 import { ActionForm } from "@/components/ActionForm";
 import { FindingCard } from "@/components/FindingCard";
+import { ThreatModelView } from "@/components/ThreatModelView";
 import { disconnectRepo, saveExcludes, scanRepo } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "code" | "agent" | "deps" | "repo" | "inventory" | "history" | "suppressed";
+type Tab = "code" | "agent" | "deps" | "repo" | "threats" | "inventory" | "history" | "suppressed";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "code", label: "Kód a klíče" },
   { id: "agent", label: "AI agenti a CI" },
   { id: "deps", label: "Závislosti (CVE)" },
   { id: "repo", label: "Nastavení repozitáře" },
+  { id: "threats", label: "Útočné scénáře (AI)" },
   { id: "inventory", label: "Seznam závislostí" },
   { id: "history", label: "Historie skenů" },
   { id: "suppressed", label: "Potlačené" },
@@ -61,6 +63,7 @@ export default async function RepoDetail({
       suppressions: true,
       dependencies: { orderBy: [{ direct: "desc" }, { name: "asc" }] },
       scans: { orderBy: { startedAt: "desc" }, take: 30 },
+      threatModels: { orderBy: { createdAt: "desc" }, take: 10 },
     },
   });
   if (!repo) notFound();
@@ -79,6 +82,7 @@ export default async function RepoDetail({
     agent: inTab("agent").length,
     deps: inTab("deps").length,
     repo: inTab("repo").length,
+    threats: repo.threatModels.filter((m) => m.status === "done").length,
     inventory: repo.dependencies.length,
     history: repo.scans.length,
     suppressed: suppressed.length,
@@ -195,6 +199,7 @@ export default async function RepoDetail({
           {...listProps("deps")}
         />
       )}
+      {tab === "threats" && <ThreatModelView repoId={repo.id} models={repo.threatModels} aiEnabled={aiEnabled} />}
       {tab === "suppressed" &&
         (suppressed.length === 0 ? (
           <p className="card p-6 text-center text-slate-500">

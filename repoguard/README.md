@@ -12,6 +12,7 @@ Main features:
 - **Triage:** mark findings as false positive or accepted risk (kept across scans). History shows new and resolved findings per scan.
 - **Exports:** PDF, SARIF 2.1.0 (upload to GitHub Code Scanning), JSON, Markdown.
 - **Optional AI review** of a single finding with Claude: verdict (true / false positive), reasoning and a proposed patch. Defender/auditor role only.
+- **Optional attack-scenario analysis (threat model):** a three-stage Claude pipeline modelled on AgentShield's red/blue/auditor mode. It shows how findings chain into realistic attacks, described in prose only (no code, payloads or commands), with a defence and verification step for each scenario and a prioritized fix plan.
 
 RepoGuard only **reports and explains** issues. It never generates or runs exploit code, and it only scans repositories the signed-in user owns or has been granted access to.
 
@@ -105,7 +106,7 @@ Requirements: Node.js 20+.
 | `ALLOWED_GITHUB_LOGINS` | recommended | Comma-separated logins allowed to sign in |
 | `TOKEN_ENCRYPTION_KEY` | optional | Separate key for encrypting stored GitHub tokens |
 | `CRON_SECRET` | optional | Enables `/api/cron` |
-| `AI_REVIEW_ENABLED` | optional | `true` shows the "Posoudit pomocí AI" button |
+| `AI_REVIEW_ENABLED` | optional | `true` enables AI finding review and the attack-scenario analysis |
 | `ANTHROPIC_API_KEY` | with AI review | Claude API key |
 | `AI_REVIEW_MODEL` | optional | Default `claude-opus-5-5` |
 | `GITHUB_OAUTH_SCOPE` | optional | Default `read:user repo` (needed for private repos). Use `read:user` for public repos only |
@@ -148,6 +149,14 @@ On Vercel, add a cron job in `vercel.json` (`{"crons":[{"path":"/api/cron","sche
 **Score.** Each category (code, secrets, AI agents & CI, dependencies, repository settings) starts at 100. Each active finding deducts points: critical 25, high 15, medium 5, low 2. The overall score is the average: A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, F below. Suppressed findings don't count.
 
 **AI review** (`AI_REVIEW_ENABLED=true`). It runs per finding and only on click. RepoGuard fetches the file at the scanned commit with your token, masks every secret it can detect, and sends about 80 lines around the finding to the Claude API. It returns a verdict, reasoning in Czech, fix steps and an optional unified-diff patch. The system prompt forbids exploit code and payloads; there is deliberately no "attacker" agent. Server-side refusal fallback (`fallbacks: "default"`) is enabled. Reviews are kept across re-scans by fingerprint.
+
+**Attack-scenario analysis** (tab *Útočné scénáře (AI)*, needs `AI_REVIEW_ENABLED=true`). It runs in the background via Next.js `after()` and the page refreshes itself while it runs. The pipeline has three stages:
+
+1. **Threat modeler:** up to 8 realistic scenarios that chain findings together, with attacker, entry point, abstract steps, impact, likelihood and finding references.
+2. **Defender:** prevent / detect / contain / verify for each scenario.
+3. **Auditor:** marks each scenario as realistic or theoretical and gives a 0–100 score, a summary for the owner and a prioritized action plan.
+
+Input is the list of active findings (max 60) plus excerpts from up to 8 files with critical/high findings, read with your token after an access re-check, with secrets masked. Every stage's system prompt forbids code, payloads and commands; any code block that slips through is stripped from the output. The latest analysis is stored and added to the PDF report. Results are AI-generated and need to be checked against the code.
 
 **SARIF.** Download it from *Export → SARIF* and upload it with `github/codeql-action/upload-sarif`, so findings appear in the repo's *Security → Code scanning* tab. Suppressed findings are marked as suppressions. Repository-settings findings have no file location and are left out.
 
