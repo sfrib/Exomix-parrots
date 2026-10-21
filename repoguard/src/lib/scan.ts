@@ -12,6 +12,8 @@ import {
 import { scanFiles } from "./scanner/engine";
 import { MAX_FILE_BYTES, detectLanguage, isExcluded, isPostureFile, parseExcludes } from "./scanner/files";
 import { checkPosture } from "./posture";
+import { checkExposedFiles } from "./scanner/rules/hardening";
+import { checkComponents, isComponentFile } from "./scanner/rules/components";
 import type { SourceFile } from "./scanner/types";
 import { isManifest, parseManifests, type Ecosystem, type ParsedDependency } from "./deps/parsers";
 import { checkDependencies, type AdvisoryCache, type DependencyVulnerability, type OsvVulnerability } from "./deps/osv";
@@ -152,9 +154,12 @@ export async function runScan(repoId: string, userId: string, kind: ScanKind, tr
     const wantCode = kinds.includes("code");
     const wantDeps = kinds.includes("deps");
 
-    const files = await downloadRepoFiles(token, remote.full_name, sha, (path, size) => {
+    const { files, paths } = await downloadRepoFiles(token, remote.full_name, sha, (path, size) => {
       if (wantDeps && isManifest(path) && !isExcluded(path, excludes)) return true;
-      if (!wantCode || size > MAX_FILE_BYTES || isExcluded(path, excludes)) return false;
+      if (!wantCode || size > MAX_FILE_BYTES) return false;
+      // Component files (WP core version, plugin/theme readme) bypass the default excludes so versions can be read.
+      if (isComponentFile(path)) return true;
+      if (isExcluded(path, excludes)) return false;
       return isPostureFile(path) || detectLanguage(path) !== null;
     });
 
@@ -179,6 +184,12 @@ export async function runScan(repoId: string, userId: string, kind: ScanKind, tr
         usesEnvFiles: sources.some((f) => /getenv\(|process\.env|\$_ENV|dotenv|os\.environ/.test(f.content)),
       });
 
+      // Web/server hardening: exposed files (by path) + dangerous directives + outdated components.
+      const webFindings = [
+        ...checkExposedFiles(paths.filter((p) => !isExcluded(p.path, excludes))),
+        ...checkComponents(files),
+      ];
+
       const prev = await previousState(repoId, ["code", "repo"]);
       const codeRows = findings.map((f) => {
         const fingerprint = codeFingerprint(f);
@@ -198,6 +209,24 @@ export async function runScan(repoId: string, userId: string, kind: ScanKind, tr
           ...carried(prev, fingerprint, now),
         };
       });
+      const webRows = webFindings.map((w) => {
+        const fingerprint = codeFingerprint({ ruleId: w.ruleId, file: w.file, snippet: w.title });
+        return {
+          repoId,
+          kind: "code",
+          fingerprint,
+          ruleId: w.ruleId,
+          severity: w.severity,
+          title: w.title,
+          cwe: null,
+          file: w.file,
+          line: null,
+          snippet: null,
+          explanation: w.explanation,
+          fix: w.fix,
+          ...carried(prev, fingerprint, now),
+        };
+      });
       const repoRows = posture.map((p) => {
         const fingerprint = sha1(`repo|${p.ruleId}`);
         return {
@@ -213,16 +242,16 @@ export async function runScan(repoId: string, userId: string, kind: ScanKind, tr
           ...carried(prev, fingerprint, now),
         };
       });
-      const counts = await diffCounts(repoId, "code", prev, [...codeRows, ...repoRows].map((r) => r.fingerprint));
+      const counts = await diffCounts(repoId, "code", prev, [...codeRows, ...webRows, ...repoRows].map((r) => r.fingerprint));
       await db.$transaction([
         db.finding.deleteMany({ where: { repoId, kind: { in: ["code", "repo"] } } }),
-        db.finding.createMany({ data: [...codeRows, ...repoRows] }),
+        db.finding.createMany({ data: [...codeRows, ...webRows, ...repoRows] }),
         db.scan.update({
           where: { id: scanId("code") },
           data: { status: "done", finishedAt: new Date(), commitSha: sha, filesScanned: sources.length, ...counts },
         }),
       ]);
-      result.codeFindings = codeRows.length;
+      result.codeFindings = codeRows.length + webRows.length;
       result.repoFindings = repoRows.length;
       result.filesScanned = sources.length;
       result.newCount = counts.newCount;

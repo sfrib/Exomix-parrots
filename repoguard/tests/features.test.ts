@@ -51,11 +51,12 @@ describe("computeScore", () => {
       ["malware", 100],
       ["code", 75],
       ["secrets", 85],
+      ["web", 100],
       ["agent", 100],
       ["repo", 98],
       ["deps", 95],
     ]);
-    expect(r.score).toBe(92);
+    expect(r.score).toBe(93);
     expect(r.grade).toBe("A");
     expect(computeScore([], { code: false, deps: false })).toBeNull();
     expect([95, 80, 65, 45, 10].map(gradeFor)).toEqual(["A", "B", "C", "D", "F"]);

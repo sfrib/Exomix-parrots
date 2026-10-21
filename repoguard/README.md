@@ -8,6 +8,8 @@ Main features:
 
 - **Code scan:** SQL injection, XSS / unsanitised input, missing authorisation, insecure uploads, hardcoded secrets and dangerous functions, each with CWE, file:line, a plain-language explanation and a fix.
 - **AI agent & CI audit:** inspired by [AgentShield](https://github.com/affaan-m/agentshield) from *Everything Claude Code*. Checks `.claude/settings.json` permissions and hooks, `.mcp.json` servers, `CLAUDE.md` / `AGENTS.md` / Cursor rules for hidden prompt injection, VS Code auto-run tasks, and risky GitHub Actions patterns.
+- **Web hardening:** flags exposed sensitive files (DB dumps, backups, config backups, logs, Adminer/phpInfo), dangerous `.htaccess` directives, risky `wp-config.php` settings, and outdated WordPress core/plugins.
+- **Evidence & verification:** every static finding shows *how it was found* (the exact rule + the matched line, with a GitHub permalink that opens on a phone) and safe, non-exploit *steps to confirm it yourself*. Static findings are deterministic matches on your code, not AI output — only the two optional features are AI.
 - **Compromise detection:** flags signs that a site is already hacked — webshells, obfuscated `eval`/decode chains, request-controlled callbacks, backdoor admin accounts, PHP files dropped in `uploads/` — with incident-response guidance. Detection only; no attack code.
 - **Dependency CVEs** via OSV.dev, with CVSS score, fixed version and upgrade command.
 - **Repository settings:** Dependabot alerts, secret scanning, branch protection, `SECURITY.md`, dependency update config, `.env` in `.gitignore`.

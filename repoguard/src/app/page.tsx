@@ -29,6 +29,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
           ["Analýza kódu", "SQL injection, XSS, chybějící kontrola oprávnění, nahrávání souborů, uložená hesla a nebezpečné funkce – s vysvětlením a návrhem opravy."],
           ["Hlídání CVE", "Kontrola composer, npm a Python závislostí proti databázi OSV.dev včetně skóre CVSS a opravené verze."],
           ["Detekce napadení", "Pozná, jestli váš web už není napadený: webshelly, zadní vrátka, obfuskovaný kód a PHP soubory v adresáři uploads – s postupem, jak web vyčistit."],
+          ["Zabezpečení webu", "Vystavené zálohy a databázové exporty, nebezpečné .htaccess direktivy, ladicí logy, nástroje typu Adminer a zjevně zastaralé pluginy či jádro WordPressu."],
           ["AI agenti a CI", "Audit CLAUDE.md, .claude/, MCP serverů, pravidel Cursoru a GitHub Actions: skryté pokyny (prompt injection), nebezpečná oprávnění, hooky, nepřipnuté balíčky."],
           ["Skóre A–F a triáž", "Bezpečnostní skóre po oblastech, označení falešných poplachů, historie nových a vyřešených nálezů, export do PDF, SARIF, JSON a Markdownu."],
           ["Volitelné AI posouzení", "Claude posoudí konkrétní nález v kontextu kódu a navrhne opravu. Jen obrana – žádný útočný kód. Tajné klíče se před odesláním maskují."],

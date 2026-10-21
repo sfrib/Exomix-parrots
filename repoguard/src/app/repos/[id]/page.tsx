@@ -17,11 +17,12 @@ import { disconnectRepo, saveExcludes, scanRepo } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "malware" | "code" | "agent" | "deps" | "repo" | "threats" | "inventory" | "history" | "suppressed";
+type Tab = "malware" | "code" | "web" | "agent" | "deps" | "repo" | "threats" | "inventory" | "history" | "suppressed";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "malware", label: "Detekce napadení" },
   { id: "code", label: "Kód a klíče" },
+  { id: "web", label: "Zabezpečení webu" },
   { id: "agent", label: "AI agenti a CI" },
   { id: "deps", label: "Závislosti (CVE)" },
   { id: "repo", label: "Nastavení repozitáře" },
@@ -34,6 +35,7 @@ const TABS: { id: Tab; label: string }[] = [
 const TAB_CATEGORIES: Partial<Record<Tab, Category[]>> = {
   malware: ["malware"],
   code: ["code", "secrets"],
+  web: ["web"],
   agent: ["agent"],
   deps: ["deps"],
   repo: ["repo"],
@@ -42,6 +44,7 @@ const TAB_CATEGORIES: Partial<Record<Tab, Category[]>> = {
 const EMPTY_TEXT: Partial<Record<Tab, string>> = {
   malware: "Nebyly nalezeny žádné známky napadení (webshelly, zadní vrátka, obfuskovaný kód). Není to záruka – pravidelně kontrolujte a držte web aktualizovaný.",
   code: "Ve zdrojovém kódu nebyla nalezena žádná slabá místa ani uložená hesla.",
+  web: "Nebyly nalezeny vystavené citlivé soubory, nebezpečné .htaccess direktivy ani zjevně zastaralé komponenty.",
   agent:
     "V konfiguraci AI agentů (CLAUDE.md, .claude/, .mcp.json, .cursorrules…) ani v GitHub Actions nebyly nalezeny žádné problémy.",
   repo: "Nastavení repozitáře odpovídá doporučením.",
@@ -83,6 +86,7 @@ export default async function RepoDetail({
   const counts: Record<Tab, number> = {
     malware: inTab("malware").length,
     code: inTab("code").length,
+    web: inTab("web").length,
     agent: inTab("agent").length,
     deps: inTab("deps").length,
     repo: inTab("repo").length,
@@ -176,6 +180,11 @@ export default async function RepoDetail({
         </p>
       )}
 
+      <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+        Nálezy ve skenu jsou <strong>deterministické</strong> – každý je konkrétní shoda pravidla na řádku vašeho kódu, s odkazem přímo na GitHub
+        (u každého nálezu „Jak jsem to našel a jak to ověřit"). AI se používá jen ve volitelných funkcích „Posoudit pomocí AI" a „Útočné scénáře".
+      </p>
+
       <nav className="flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((t) => (
           <Link
@@ -188,7 +197,7 @@ export default async function RepoDetail({
         ))}
       </nav>
 
-      {(tab === "malware" || tab === "code" || tab === "agent" || tab === "repo") && (
+      {(tab === "malware" || tab === "code" || tab === "web" || tab === "agent" || tab === "repo") && (
         <FindingList findings={inTab(tab)} scanned={Boolean(repo.lastCodeScanAt)} emptyText={EMPTY_TEXT[tab]!} {...listProps(tab)} />
       )}
       {tab === "deps" && (

@@ -5,6 +5,7 @@ import { blobUrl, cweUrl, formatDateTime } from "@/lib/format";
 import { SEVERITY_LABEL_CS, isSeverity } from "@/lib/severity";
 import { SUPPRESSION_LABEL_CS } from "@/lib/findings";
 import { VERDICT_LABEL_CS, type AiReview } from "@/lib/ai-review";
+import { howItWasFound, verificationSteps } from "@/lib/verify";
 import { aiReviewFinding, restoreFinding, suppressFinding } from "@/app/actions";
 
 interface Props {
@@ -115,6 +116,28 @@ export function FindingCard({ finding: f, htmlUrl, commitSha, isNew, aiEnabled, 
           <p className="mt-2 text-xs text-slate-400">Návrh vygenerovala AI – před použitím ho zkontrolujte.</p>
         </section>
       )}
+
+      <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
+        <summary className="cursor-pointer font-medium text-slate-700">Jak jsem to našel a jak to ověřit</summary>
+        <p className="mt-2 text-slate-600">{howItWasFound(f)}</p>
+        {f.file && (
+          <p className="mt-1 text-xs">
+            <span className="text-slate-500">Přesné místo: </span>
+            <a href={blobUrl(htmlUrl, commitSha, f.file, f.line)} target="_blank" rel="noreferrer" className="break-all font-mono text-sky-700 hover:underline">
+              {f.file}
+              {f.line ? `:${f.line}` : ""} ↗
+            </a>
+          </p>
+        )}
+        <div className="mt-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Ověření krok za krokem</div>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-slate-600">
+            {verificationSteps(f).map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      </details>
 
       <footer className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2 text-xs text-slate-400">
         <span>Poprvé zjištěno: {formatDateTime(f.firstSeenAt)}</span>

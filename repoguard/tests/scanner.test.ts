@@ -130,7 +130,7 @@ describe("secret rules", () => {
       ].join("\n"),
     };
     const findings = scanFile(file);
-    expect(findings.map((f) => `${f.ruleId}@${f.line}`)).toEqual(["secret.wp-db-password@2", "secret.generic@6"]);
+    expect(findings.map((f) => `${f.ruleId}@${f.line}`)).toEqual(["secret.wp-db-password@2", "secret.generic@6", "web.wpconfig-file-edit@1"]);
     expect(findings[0].snippet).not.toContain("Papousek2024!");
   });
 

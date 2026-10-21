@@ -118,6 +118,12 @@ export interface DownloadedFile {
   content: string;
 }
 
+export interface RepoFiles {
+  files: DownloadedFile[];
+  /** Every regular-file path in the repo (incl. ones whose content was not downloaded). */
+  paths: { path: string; size: number }[];
+}
+
 /**
  * Downloads the repository tarball at `ref` and returns text files accepted by `accept`.
  * Files are read in memory only; nothing is written to disk or executed.
@@ -127,11 +133,12 @@ export async function downloadRepoFiles(
   fullName: string,
   ref: string,
   accept: (path: string, size: number) => boolean,
-): Promise<DownloadedFile[]> {
+): Promise<RepoFiles> {
   const res = await gh(token, `/repos/${fullName}/tarball/${encodeURIComponent(ref)}`);
   if (!res.body) throw new GitHubError("GitHub nevrátil archiv repozitáře.", 502);
 
   const files: DownloadedFile[] = [];
+  const paths: { path: string; size: number }[] = [];
   let downloaded = 0;
   const extract = tar.extract();
 
@@ -146,7 +153,12 @@ export async function downloadRepoFiles(
       const { name, type, size = 0 } = entry.header;
       // Archive paths start with "<owner>-<repo>-<sha>/"
       const path = name.split("/").slice(1).join("/");
-      if (type !== "file" || !path || files.length >= MAX_FILES || !accept(path, size)) {
+      if (type !== "file" || !path) {
+        entry.resume();
+        continue;
+      }
+      if (paths.length < 50000) paths.push({ path, size });
+      if (files.length >= MAX_FILES || !accept(path, size)) {
         entry.resume();
         continue;
       }
@@ -159,5 +171,5 @@ export async function downloadRepoFiles(
   })();
 
   await Promise.all([pipeline(source, createGunzip(), extract), consume]);
-  return files;
+  return { files, paths };
 }
