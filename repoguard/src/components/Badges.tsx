@@ -1,0 +1,54 @@
+import { SEVERITY_LABEL_CS, STATUS_LABEL_CS, type RepoStatus, type Severity } from "@/lib/severity";
+
+const SEVERITY_STYLE: Record<Severity, string> = {
+  critical: "bg-red-700 text-white",
+  high: "bg-orange-100 text-orange-800 ring-1 ring-orange-300",
+  medium: "bg-amber-50 text-amber-800 ring-1 ring-amber-300",
+  low: "bg-slate-100 text-slate-700 ring-1 ring-slate-300",
+};
+
+const STATUS_STYLE: Record<RepoStatus, string> = {
+  ok: "bg-emerald-50 text-emerald-800 ring-emerald-300",
+  warnings: "bg-amber-50 text-amber-800 ring-amber-300",
+  critical: "bg-red-50 text-red-800 ring-red-300",
+  unscanned: "bg-slate-100 text-slate-600 ring-slate-300",
+};
+
+const STATUS_DOT: Record<RepoStatus, string> = {
+  ok: "bg-emerald-500",
+  warnings: "bg-amber-500",
+  critical: "bg-red-600",
+  unscanned: "bg-slate-400",
+};
+
+export function SeverityBadge({ severity }: { severity: Severity }) {
+  return (
+    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLE[severity]}`}>
+      {SEVERITY_LABEL_CS[severity]}
+    </span>
+  );
+}
+
+export function StatusBadge({ status }: { status: RepoStatus }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${STATUS_STYLE[status]}`}>
+      <span className={`h-2 w-2 rounded-full ${STATUS_DOT[status]}`} aria-hidden />
+      {STATUS_LABEL_CS[status]}
+    </span>
+  );
+}
+
+export function SeverityCounts({ counts }: { counts: Record<Severity, number> }) {
+  const order: Severity[] = ["critical", "high", "medium", "low"];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {order.map((s) =>
+        counts[s] > 0 ? (
+          <span key={s} className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${SEVERITY_STYLE[s]}`} title={SEVERITY_LABEL_CS[s]}>
+            {counts[s]} {SEVERITY_LABEL_CS[s].toLowerCase()}
+          </span>
+        ) : null,
+      )}
+    </div>
+  );
+}

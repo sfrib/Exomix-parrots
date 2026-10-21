@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  githubId       Int      @unique
+  login          String
+  name           String?
+  avatarUrl      String?
+  // GitHub OAuth token, AES-256-GCM encrypted (see src/lib/crypto.ts)
+  encryptedToken String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  repos          Repo[]
+}
+
+model Repo {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubId       Int
+  fullName       String
+  defaultBranch  String
+  isPrivate      Boolean   @default(false)
+  htmlUrl        String
+  // Newline-separated path prefixes excluded from scanning
+  excludePaths   String    @default("")
+  lastCodeScanAt DateTime?
+  lastDepScanAt  DateTime?
+  lastCommitSha  String?
+  createdAt      DateTime  @default(now())
+  scans          Scan[]
+  findings       Finding[]
+  dependencies   Dependency[]
+
+  @@unique([userId, githubId])
+}
+
+model Scan {
+  id           String    @id @default(cuid())
+  repoId       String
+  repo         Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  kind         String // "code" | "deps"
+  status       String // "running" | "done" | "failed"
+  trigger      String    @default("manual") // "manual" | "cron"
+  commitSha    String?
+  filesScanned Int       @default(0)
+  error        String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([repoId, kind, startedAt])
+}
+
+model Finding {
+  id               String   @id @default(cuid())
+  repoId           String
+  repo             Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  kind             String // "code" | "dependency"
+  // Stable identity used to keep firstSeenAt across scans
+  fingerprint      String
+  ruleId           String
+  severity         String // "critical" | "high" | "medium" | "low"
+  title            String
+  cwe              String?
+  file             String?
+  line             Int?
+  snippet          String?
+  explanation      String
+  fix              String
+  // Dependency-specific fields
+  packageName      String?
+  ecosystem        String?
+  installedVersion String?
+  fixedVersion     String?
+  advisoryId       String?
+  aliases          String? // comma-separated, e.g. CVE ids
+  cvssScore        Float?
+  cvssVector       String?
+  referenceUrl     String?
+  firstSeenAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([repoId, kind])
+}
+
+model Dependency {
+  id          String  @id @default(cuid())
+  repoId      String
+  repo        Repo    @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  ecosystem   String
+  name        String
+  version     String
+  manifest    String
+  direct      Boolean @default(true)
+  approximate Boolean @default(false)
+
+  @@index([repoId])
+}
+
+model Advisory {
+  id        String   @id
+  json      String
+  fetchedAt DateTime @default(now())
+}

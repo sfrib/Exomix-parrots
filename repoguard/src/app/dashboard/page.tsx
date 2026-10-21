@@ -1,0 +1,99 @@
+import Link from "next/link";
+import { db } from "@/lib/db";
+import { requireUser } from "@/lib/session";
+import { countBySeverity, statusFor } from "@/lib/findings";
+import { formatDateTime, plural } from "@/lib/format";
+import { SeverityCounts, StatusBadge } from "@/components/Badges";
+import { ActionForm } from "@/components/ActionForm";
+import { scanRepo } from "@/app/actions";
+
+export const dynamic = "force-dynamic";
+
+export default async function Dashboard() {
+  const user = await requireUser();
+  const repos = await db.repo.findMany({
+    where: { userId: user.id },
+    include: { findings: { select: { severity: true, kind: true } } },
+    orderBy: { fullName: "asc" },
+  });
+
+  const statuses = repos.map((r) => statusFor(r, r.findings));
+  const summary = {
+    critical: statuses.filter((s) => s === "critical").length,
+    warnings: statuses.filter((s) => s === "warnings").length,
+    ok: statuses.filter((s) => s === "ok").length,
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Přehled repozitářů</h1>
+          <p className="text-sm text-slate-500">
+            {plural(repos.length, "připojený repozitář", "připojené repozitáře", "připojených repozitářů")}
+          </p>
+        </div>
+        <Link href="/repos/add" className="btn-primary">
+          + Přidat repozitář
+        </Link>
+      </div>
+
+      {repos.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <SummaryTile label="Kritické" value={summary.critical} tone="text-red-700" />
+          <SummaryTile label="Varování" value={summary.warnings} tone="text-amber-700" />
+          <SummaryTile label="OK" value={summary.ok} tone="text-emerald-700" />
+        </div>
+      )}
+
+      {repos.length === 0 ? (
+        <div className="card p-10 text-center">
+          <p className="text-slate-600">Zatím nemáte připojený žádný repozitář.</p>
+          <Link href="/repos/add" className="btn-primary mt-4">
+            Vybrat repozitáře z GitHubu
+          </Link>
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {repos.map((repo, i) => {
+            const code = repo.findings.filter((f) => f.kind === "code");
+            const deps = repo.findings.filter((f) => f.kind === "dependency");
+            return (
+              <li key={repo.id} className="card flex flex-wrap items-center justify-between gap-4 p-4">
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={statuses[i]} />
+                    <Link href={`/repos/${repo.id}`} className="truncate font-semibold hover:underline">
+                      {repo.fullName}
+                    </Link>
+                    {repo.isPrivate && <span className="rounded border border-slate-300 px-1.5 text-xs text-slate-500">soukromý</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
+                    <span>Kód: {plural(code.length, "nález", "nálezy", "nálezů")} · {formatDateTime(repo.lastCodeScanAt)}</span>
+                    <span>Závislosti: {plural(deps.length, "zranitelnost", "zranitelnosti", "zranitelností")} · {formatDateTime(repo.lastDepScanAt)}</span>
+                  </div>
+                  <SeverityCounts counts={countBySeverity(repo.findings)} />
+                </div>
+                <div className="flex items-start gap-2">
+                  <ActionForm action={scanRepo.bind(null, repo.id, "all")} label="Skenovat" pendingLabel="Skenuji…" variant="secondary" className="text-right" />
+                  <Link href={`/repos/${repo.id}`} className="btn-secondary">
+                    Detail
+                  </Link>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SummaryTile({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="card p-4">
+      <div className={`text-2xl font-bold ${tone}`}>{value}</div>
+      <div className="text-xs text-slate-500">{label}</div>
+    </div>
+  );
+}
