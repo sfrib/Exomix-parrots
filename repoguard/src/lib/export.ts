@@ -2,6 +2,7 @@ import type { Finding, Repo, Suppression } from "@/generated/prisma/client";
 import { computeScore, CATEGORY_LABEL_CS, categoryOf } from "./score";
 import { partitionSuppressed, sortFindings, SUPPRESSION_LABEL_CS } from "./findings";
 import { SEVERITY_LABEL_CS, isSeverity, type Severity } from "./severity";
+import { canonicalReport, signReport } from "./sign";
 
 /** Report exports: SARIF 2.1.0 (GitHub code scanning), JSON and Markdown. */
 
@@ -88,10 +89,17 @@ export function toJson(repo: RepoWithFindings) {
     firstSeenAt: f.firstSeenAt,
     aiReview: f.aiReview ? JSON.parse(f.aiReview) : null,
   });
+  let signature = null;
+  try {
+    signature = signReport(canonicalReport(repo, active));
+  } catch {
+    // Signing secret not configured; report is still valid, just unsigned.
+  }
   return {
     repository: repo.fullName,
     commit: repo.lastCommitSha,
     generatedAt: new Date().toISOString(),
+    signature,
     lastCodeScanAt: repo.lastCodeScanAt,
     lastDependencyScanAt: repo.lastDepScanAt,
     score,

@@ -164,14 +164,36 @@ export default async function RepoDetail({
           <div className="absolute z-10 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg">
             <a href={`/api/repos/${repo.id}/report`} className="block px-3 py-1.5 hover:bg-slate-50">PDF report</a>
             <a href={`/api/repos/${repo.id}/export?format=sarif`} className="block px-3 py-1.5 hover:bg-slate-50">SARIF (GitHub Code Scanning)</a>
-            <a href={`/api/repos/${repo.id}/export?format=json`} className="block px-3 py-1.5 hover:bg-slate-50">JSON</a>
+            <a href={`/api/repos/${repo.id}/export?format=json`} className="block px-3 py-1.5 hover:bg-slate-50">JSON (podepsaný)</a>
             <a href={`/api/repos/${repo.id}/export?format=md`} className="block px-3 py-1.5 hover:bg-slate-50">Markdown</a>
+            <a href={`/api/repos/${repo.id}/export?format=patch`} className="block px-3 py-1.5 hover:bg-slate-50">Anotační patch (PR)</a>
           </div>
         </details>
         <form action={disconnectRepo.bind(null, repo.id)} className="ml-auto">
           <button className="btn-danger">Odpojit</button>
         </form>
       </div>
+
+      <details className="card p-4 text-sm">
+        <summary className="cursor-pointer font-medium">Ověření pro admina – jak doložit, že nález je pravý</summary>
+        <div className="mt-2 space-y-2 text-slate-600">
+          <p>
+            <strong>1. Anotační patch (Export → Anotační patch).</strong> Stáhne soubor .patch, který k nalezeným řádkům přidá komentář{" "}
+            <code className="font-mono">// RepoGuard: …</code>. Aplikujete ho ve své kopii (<code className="font-mono">git apply soubor.patch</code>) a otevřete
+            pull request – admin uvidí upozornění přímo u kódu a sám ho schválí. Nic se nemění na živém webu, jde jen o návrh změny.
+          </p>
+          <p>
+            <strong>2. Podepsaný report (Export → JSON).</strong> Report má kryptografický podpis. Admin si na stránce{" "}
+            <Link href="/verify" className="text-sky-700 hover:underline">/verify</Link> ověří, že je pravý a nezměněný a patří k danému commitu.
+          </p>
+          <p>
+            <strong>3. SARIF (Export → SARIF).</strong> Nahrajete do GitHubu (Code scanning) a nálezy se zobrazí přímo v záložce Security repozitáře.
+          </p>
+          <p className="text-xs text-slate-400">
+            Vkládat cokoli přímo do cizího živého webu je nelegální. Tyto tři způsoby jsou legální, protože měníte jen vlastní kód / data reportu, ne cizí systém.
+          </p>
+        </div>
+      </details>
 
       {running && <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-800">Sken právě probíhá…</p>}
       {lastFailed && (
