@@ -19,7 +19,7 @@ export function ActionForm({ action, label, pendingLabel, variant = "primary", c
       {children}
       <button type="submit" className={`btn-${variant}`} disabled={pending}>
         {pending && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />}
-        {pending ? pendingLabel ?? "Probíhá…" : label}
+        {pending ? pendingLabel ?? "…" : label}
       </button>
       {state && (
         <p role="status" className={`mt-2 text-sm ${state.ok ? "text-emerald-700" : "text-red-700"}`}>

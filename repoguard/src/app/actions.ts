@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { getFileContent, getRepoById, hasScanAccess } from "@/lib/github";
 import { AiReviewError, aiReviewEnabled, reviewFinding } from "@/lib/ai-review";
 import { createThreatModel, executeThreatModel } from "@/lib/threat-run";
+import { getLocale } from "@/lib/i18n/server";
 import { requireUser, tokenFor } from "@/lib/session";
 import { runScan, type ScanKind } from "@/lib/scan";
 import { plural } from "@/lib/format";
@@ -116,7 +117,7 @@ export async function restoreFinding(repoId: string, fingerprint: string): Promi
   revalidatePath("/dashboard");
 }
 
-export async function aiReviewFinding(findingId: string, _prev: ActionState): Promise<ActionState> {
+export async function aiReviewFinding(findingId: string, locale: "en" | "cs", _prev: ActionState): Promise<ActionState> {
   const user = await requireUser();
   if (!aiReviewEnabled()) return { ok: false, message: "AI posouzení není zapnuté (AI_REVIEW_ENABLED)." };
   const finding = await db.finding.findFirst({ where: { id: findingId, repo: { userId: user.id } }, include: { repo: true } });
@@ -131,7 +132,7 @@ export async function aiReviewFinding(findingId: string, _prev: ActionState): Pr
       if (!hasScanAccess(remote, user.login)) return { ok: false, message: "K repozitáři už nemáte přístup." };
       content = await getFileContent(token, remote.full_name, finding.file, finding.repo.lastCommitSha);
     }
-    const review = await reviewFinding(finding, content);
+    const review = await reviewFinding(finding, content, undefined, locale);
     await db.finding.update({ where: { id: finding.id }, data: { aiReview: JSON.stringify(review), aiReviewedAt: new Date() } });
   } catch (err) {
     return { ok: false, message: err instanceof AiReviewError ? err.message : errorMessage(err) };
@@ -140,13 +141,13 @@ export async function aiReviewFinding(findingId: string, _prev: ActionState): Pr
   return { ok: true, message: "AI posouzení je hotové." };
 }
 
-export async function startThreatModel(repoId: string, _prev: ActionState): Promise<ActionState> {
+export async function startThreatModel(repoId: string, locale: "en" | "cs", _prev: ActionState): Promise<ActionState> {
   const user = await requireUser();
   if (!aiReviewEnabled()) return { ok: false, message: "AI funkce nejsou zapnuté (AI_REVIEW_ENABLED)." };
   try {
     const tm = await createThreatModel(repoId, user.id);
     // Runs after the response is sent; the page polls until it finishes.
-    after(() => executeThreatModel(tm.id));
+    after(() => executeThreatModel(tm.id, locale));
   } catch (err) {
     return { ok: false, message: errorMessage(err) };
   }

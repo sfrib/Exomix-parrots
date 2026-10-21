@@ -1,7 +1,10 @@
 import type { Finding, Repo, Suppression } from "@/generated/prisma/client";
-import { computeScore, CATEGORY_LABEL_CS, categoryOf } from "./score";
+import { computeScore, categoryOf } from "./score";
 import { partitionSuppressed, sortFindings, SUPPRESSION_LABEL_CS } from "./findings";
-import { SEVERITY_LABEL_CS, isSeverity, type Severity } from "./severity";
+import { isSeverity, type Severity } from "./severity";
+import { localizedFinding } from "./i18n/findings";
+import { t } from "./i18n/messages";
+import type { Locale } from "./i18n/locale";
 import { canonicalReport, signReport } from "./sign";
 
 /** Report exports: SARIF 2.1.0 (GitHub code scanning), JSON and Markdown. */
@@ -18,7 +21,7 @@ const SECURITY_SEVERITY: Record<Severity, string> = { critical: "9.5", high: "8.
 
 type RepoWithFindings = Repo & { findings: Finding[]; suppressions: Suppression[] };
 
-export function toSarif(repo: RepoWithFindings, version: string) {
+export function toSarif(repo: RepoWithFindings, version: string, locale: Locale = "en") {
   const suppressedBy = new Map(repo.suppressions.map((s) => [s.fingerprint, s]));
   // Repository settings findings have no code location, so they are not part of SARIF.
   const findings = sortFindings(repo.findings).filter((f) => f.file);
@@ -26,12 +29,13 @@ export function toSarif(repo: RepoWithFindings, version: string) {
   const rules = ruleIds.map((id) => {
     const f = findings.find((x) => x.ruleId === id)!;
     const sev = isSeverity(f.severity) ? f.severity : "medium";
+    const lf = localizedFinding(f, locale);
     return {
       id,
       name: id,
-      shortDescription: { text: f.kind === "dependency" ? "Zranitelná závislost" : f.title },
-      fullDescription: { text: f.kind === "dependency" ? "Závislost se známou zranitelností (OSV.dev)." : f.explanation },
-      help: { text: f.kind === "dependency" ? "Aktualizujte balíček na opravenou verzi." : f.fix },
+      shortDescription: { text: lf.title },
+      fullDescription: { text: lf.explanation },
+      help: { text: lf.fix },
       properties: {
         tags: ["security", ...(f.cwe ? [`external/cwe/${f.cwe.toLowerCase()}`] : []), categoryOf(f)],
         "security-severity": SECURITY_SEVERITY[sev],
@@ -41,11 +45,12 @@ export function toSarif(repo: RepoWithFindings, version: string) {
   const results = findings.map((f) => {
     const sev = isSeverity(f.severity) ? f.severity : "medium";
     const suppression = suppressedBy.get(f.fingerprint);
+    const lf = localizedFinding(f, locale);
     return {
       ruleId: f.ruleId,
       ruleIndex: ruleIds.indexOf(f.ruleId),
       level: SARIF_LEVEL[sev],
-      message: { text: `${f.title}. ${f.explanation} Oprava: ${f.fix}` },
+      message: { text: `${lf.title}. ${lf.explanation} Fix: ${lf.fix}` },
       locations: [{ physicalLocation: { artifactLocation: { uri: f.file! }, region: { startLine: f.line ?? 1 } } }],
       partialFingerprints: { "repoguard/v1": f.fingerprint },
       ...(suppression
@@ -68,27 +73,30 @@ export function toSarif(repo: RepoWithFindings, version: string) {
   };
 }
 
-export function toJson(repo: RepoWithFindings) {
+export function toJson(repo: RepoWithFindings, locale: Locale = "en") {
   const { active, suppressed } = partitionSuppressed(repo.findings, repo.suppressions);
   const score = computeScore(active, { code: Boolean(repo.lastCodeScanAt), deps: Boolean(repo.lastDepScanAt) });
-  const strip = (f: Finding) => ({
+  const strip = (f: Finding) => {
+    const lf = localizedFinding(f, locale);
+    return {
     id: f.fingerprint,
     category: categoryOf(f),
     ruleId: f.ruleId,
     severity: f.severity,
-    title: f.title,
+    title: lf.title,
     cwe: f.cwe,
     file: f.file,
     line: f.line,
     snippet: f.snippet,
-    explanation: f.explanation,
-    fix: f.fix,
+    explanation: lf.explanation,
+    fix: lf.fix,
     ...(f.kind === "dependency"
       ? { package: f.packageName, ecosystem: f.ecosystem, installedVersion: f.installedVersion, fixedVersion: f.fixedVersion, advisoryId: f.advisoryId, aliases: f.aliases, cvssScore: f.cvssScore }
       : {}),
     firstSeenAt: f.firstSeenAt,
     aiReview: f.aiReview ? JSON.parse(f.aiReview) : null,
-  });
+    };
+  };
   let signature = null;
   try {
     signature = signReport(canonicalReport(repo, active));
@@ -108,29 +116,37 @@ export function toJson(repo: RepoWithFindings) {
   };
 }
 
-export function toMarkdown(repo: RepoWithFindings): string {
+export function toMarkdown(repo: RepoWithFindings, locale: Locale = "en"): string {
   const { active, suppressed } = partitionSuppressed(repo.findings, repo.suppressions);
   const score = computeScore(active, { code: Boolean(repo.lastCodeScanAt), deps: Boolean(repo.lastDepScanAt) });
-  const out: string[] = [`# Bezpečnostní report – ${repo.fullName}`, ""];
-  if (repo.lastCommitSha) out.push(`Commit \`${repo.lastCommitSha.slice(0, 7)}\` · větev \`${repo.defaultBranch}\``, "");
+  const cs = locale === "cs";
+  const out: string[] = [`# ${cs ? "Bezpečnostní report" : "Security report"} – ${repo.fullName}`, ""];
+  if (repo.lastCommitSha) out.push(`Commit \`${repo.lastCommitSha.slice(0, 7)}\` · ${cs ? "větev" : "branch"} \`${repo.defaultBranch}\``, "");
   if (score) {
-    out.push(`**Skóre: ${score.score}/100 (${score.grade})**`, "", "| Oblast | Skóre | Nálezy |", "| --- | --- | --- |");
-    for (const c of score.categories) out.push(`| ${CATEGORY_LABEL_CS[c.category]} | ${c.score} | ${c.findings} |`);
+    out.push(
+      `**${cs ? "Skóre" : "Score"}: ${score.score}/100 (${score.grade})**`,
+      "",
+      cs ? "| Oblast | Skóre | Nálezy |" : "| Area | Score | Findings |",
+      "| --- | --- | --- |",
+    );
+    for (const c of score.categories) out.push(`| ${t(`cat.${c.category}`, locale)} | ${c.score} | ${c.findings} |`);
     out.push("");
   }
   for (const f of sortFindings(active)) {
-    const sev = isSeverity(f.severity) ? SEVERITY_LABEL_CS[f.severity] : f.severity;
-    out.push(`## [${sev}] ${f.title}${f.cwe ? ` (${f.cwe})` : ""}`, "");
+    const sev = isSeverity(f.severity) ? t(`sev.${f.severity}`, locale) : f.severity;
+    const lf = localizedFinding(f, locale);
+    out.push(`## [${sev}] ${lf.title}${f.cwe ? ` (${f.cwe})` : ""}`, "");
     if (f.file) out.push(`\`${f.file}${f.line ? `:${f.line}` : ""}\``, "");
-    if (f.kind === "dependency") out.push(`Nainstalováno ${f.installedVersion}, opraveno ve verzi ${f.fixedVersion ?? "–"}, CVSS ${f.cvssScore ?? "–"}, ${f.aliases ?? f.advisoryId}`, "");
+    if (f.kind === "dependency") out.push(`${f.installedVersion} → ${f.fixedVersion ?? "–"}, CVSS ${f.cvssScore ?? "–"}, ${f.aliases ?? f.advisoryId}`, "");
     if (f.snippet) out.push("```", f.snippet, "```", "");
-    out.push(`**Proč je to riziko:** ${f.explanation}`, "", `**Jak to opravit:** ${f.fix}`, "");
+    out.push(`**${t("finding.why", locale)}:** ${lf.explanation}`, "", `**${t("finding.fix", locale)}:** ${lf.fix}`, "");
   }
   if (suppressed.length) {
-    out.push("## Potlačené nálezy", "");
+    out.push(`## ${cs ? "Potlačené nálezy" : "Suppressed findings"}`, "");
     for (const f of suppressed) {
       const s = repo.suppressions.find((x) => x.fingerprint === f.fingerprint)!;
-      out.push(`- ${f.title} – ${SUPPRESSION_LABEL_CS[s.status] ?? s.status}${s.note ? `: ${s.note}` : ""}`);
+      const label = s.status === "false_positive" ? (cs ? "Falešně pozitivní" : "False positive") : cs ? "Akceptované riziko" : "Accepted risk";
+      out.push(`- ${localizedFinding(f, locale).title} – ${label}${s.note ? `: ${s.note}` : ""}`);
     }
   }
   return out.join("\n");

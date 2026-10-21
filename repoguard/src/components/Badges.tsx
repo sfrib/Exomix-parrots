@@ -1,4 +1,9 @@
-import { SEVERITY_LABEL_CS, STATUS_LABEL_CS, type RepoStatus, type Severity } from "@/lib/severity";
+import { type RepoStatus, type Severity } from "@/lib/severity";
+import { t } from "@/lib/i18n/messages";
+import type { Locale } from "@/lib/i18n/locale";
+
+const sevKey = (s: Severity) => (`sev.${s}` as const);
+const statusKey = (s: RepoStatus) => (`status.${s}` as const);
 
 const SEVERITY_STYLE: Record<Severity, string> = {
   critical: "bg-red-700 text-white",
@@ -21,31 +26,31 @@ const STATUS_DOT: Record<RepoStatus, string> = {
   unscanned: "bg-slate-400",
 };
 
-export function SeverityBadge({ severity }: { severity: Severity }) {
+export function SeverityBadge({ severity, locale }: { severity: Severity; locale: Locale }) {
   return (
     <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLE[severity]}`}>
-      {SEVERITY_LABEL_CS[severity]}
+      {t(sevKey(severity), locale)}
     </span>
   );
 }
 
-export function StatusBadge({ status }: { status: RepoStatus }) {
+export function StatusBadge({ status, locale }: { status: RepoStatus; locale: Locale }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${STATUS_STYLE[status]}`}>
       <span className={`h-2 w-2 rounded-full ${STATUS_DOT[status]}`} aria-hidden />
-      {STATUS_LABEL_CS[status]}
+      {t(statusKey(status), locale)}
     </span>
   );
 }
 
-export function SeverityCounts({ counts }: { counts: Record<Severity, number> }) {
+export function SeverityCounts({ counts, locale }: { counts: Record<Severity, number>; locale: Locale }) {
   const order: Severity[] = ["critical", "high", "medium", "low"];
   return (
     <div className="flex flex-wrap gap-1.5">
       {order.map((s) =>
         counts[s] > 0 ? (
-          <span key={s} className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${SEVERITY_STYLE[s]}`} title={SEVERITY_LABEL_CS[s]}>
-            {counts[s]} {SEVERITY_LABEL_CS[s].toLowerCase()}
+          <span key={s} className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${SEVERITY_STYLE[s]}`} title={t(sevKey(s), locale)}>
+            {counts[s]} {t(sevKey(s), locale).toLowerCase()}
           </span>
         ) : null,
       )}

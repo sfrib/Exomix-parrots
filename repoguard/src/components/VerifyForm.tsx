@@ -2,32 +2,39 @@
 
 import { useActionState } from "react";
 import { verifyPastedReport, type VerifyResult } from "@/app/verify/actions";
+import type { Locale } from "@/lib/i18n/locale";
 
-export function VerifyForm() {
+interface Tr {
+  placeholder: string;
+  button: string;
+  verifying: string;
+  okTitle: string;
+  repository: string;
+  commit: string;
+  count: string;
+  signedAt: string;
+}
+
+export function VerifyForm({ locale, tr }: { locale: Locale; tr: Tr }) {
   const [state, action, pending] = useActionState<VerifyResult | null, FormData>(verifyPastedReport, null);
   return (
     <form action={action} className="space-y-3">
-      <textarea
-        name="report"
-        rows={10}
-        placeholder='Vložte obsah JSON reportu (začíná { "repository": ... )'
-        className="block w-full rounded-lg border border-slate-300 p-3 font-mono text-xs"
-      />
+      <textarea name="report" rows={10} placeholder={tr.placeholder} className="block w-full rounded-lg border border-slate-300 p-3 font-mono text-xs" />
       <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Ověřuji…" : "Ověřit podpis"}
+        {pending ? tr.verifying : tr.button}
       </button>
       {state && state.ok && (
         <div className="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-900">
-          <p className="font-semibold">✓ Podpis souhlasí – report je pravý a nezměněný.</p>
+          <p className="font-semibold">{tr.okTitle}</p>
           <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
-            <dt className="text-emerald-700">Repozitář</dt>
+            <dt className="text-emerald-700">{tr.repository}</dt>
             <dd className="font-mono">{state.repository}</dd>
-            <dt className="text-emerald-700">Commit</dt>
+            <dt className="text-emerald-700">{tr.commit}</dt>
             <dd className="font-mono">{state.commit ?? "—"}</dd>
-            <dt className="text-emerald-700">Počet nálezů</dt>
+            <dt className="text-emerald-700">{tr.count}</dt>
             <dd>{state.findingCount}</dd>
-            <dt className="text-emerald-700">Podepsáno</dt>
-            <dd>{new Date(state.signedAt).toLocaleString("cs-CZ")}</dd>
+            <dt className="text-emerald-700">{tr.signedAt}</dt>
+            <dd>{new Date(state.signedAt).toLocaleString(locale === "cs" ? "cs-CZ" : "en-GB")}</dd>
           </dl>
         </div>
       )}

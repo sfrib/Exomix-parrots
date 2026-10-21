@@ -2,7 +2,7 @@
 
 > **Standalone project** (MIT licensed). This folder is self-contained — copy it into its own Git repository to publish it. It was developed alongside, but does not depend on, the ExoMix app.
 
-A defensive security scanner for **your own** GitHub repositories. It finds common weaknesses in PHP/WordPress and JavaScript/TypeScript code, audits AI coding-agent configuration (Claude Code, MCP, Cursor) and GitHub Actions, checks repository security settings, and alerts you when a dependency has a known vulnerability (CVE). The UI is in Czech.
+A defensive security scanner for **your own** GitHub repositories. It finds common weaknesses in PHP/WordPress and JavaScript/TypeScript code, audits AI coding-agent configuration (Claude Code, MCP, Cursor) and GitHub Actions, checks repository security settings, and alerts you when a dependency has a known vulnerability (CVE). The UI is **bilingual (English / Czech)** with a switcher in the header — English is the default, and finding text, exports and the optional AI output all follow the selected language.
 
 Main features:
 

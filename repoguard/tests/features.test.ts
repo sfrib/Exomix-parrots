@@ -124,8 +124,8 @@ describe("exports", () => {
     expect(json.suppressed).toHaveLength(1);
     expect(json.score?.grade).toBeDefined();
     const md = toMarkdown(data);
-    expect(md).toContain("# Bezpečnostní report – o/r");
-    expect(md).toContain("## Potlačené nálezy");
+    expect(md).toContain("# Security report – o/r");
+    expect(md).toContain("## Suppressed findings");
   });
 });
 

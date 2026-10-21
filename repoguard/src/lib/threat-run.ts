@@ -20,7 +20,7 @@ export async function createThreatModel(repoId: string, userId: string) {
 }
 
 /** Runs the pipeline for a created record and stores the result (never throws). */
-export async function executeThreatModel(threatModelId: string): Promise<void> {
+export async function executeThreatModel(threatModelId: string, locale: "en" | "cs" = "en"): Promise<void> {
   const tm = await db.threatModel.findUnique({
     where: { id: threatModelId },
     include: { repo: { include: { user: true, findings: true, suppressions: true } } },
@@ -49,11 +49,16 @@ export async function executeThreatModel(threatModelId: string): Promise<void> {
     }
 
     const context = buildContext(repo, active, refs, excerpts);
-    const result = await runPipeline(context, undefined, {
-      onStage: async (stage) => {
-        await db.threatModel.update({ where: { id: tm.id }, data: { stage } });
+    const result = await runPipeline(
+      context,
+      undefined,
+      {
+        onStage: async (stage) => {
+          await db.threatModel.update({ where: { id: tm.id }, data: { stage } });
+        },
       },
-    });
+      locale,
+    );
     await db.threatModel.update({
       where: { id: tm.id },
       data: {

@@ -4,6 +4,7 @@ import { toJson, toMarkdown, toSarif } from "@/lib/export";
 import { annotatablePaths, buildAnnotationPatch } from "@/lib/annotate";
 import { GitHubError, getFileContent, getRepoById, hasScanAccess } from "@/lib/github";
 import { tokenFor } from "@/lib/session";
+import { getLocale } from "@/lib/i18n/server";
 import pkg from "../../../../../../package.json";
 
 export const runtime = "nodejs";
@@ -25,6 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { type, ext } = FORMATS[format as keyof typeof FORMATS];
 
   const { id } = await params;
+  const locale = await getLocale();
   const repo = await db.repo.findFirst({ where: { id, userId: user.id }, include: { findings: true, suppressions: true } });
   if (!repo) return new Response("Repozitář nebyl nalezen", { status: 404 });
 
@@ -53,7 +55,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!body) return new Response("Patch se nepodařilo vytvořit.", { status: 400 });
   } else {
     body =
-      format === "sarif" ? JSON.stringify(toSarif(repo, pkg.version), null, 2) : format === "md" ? toMarkdown(repo) : JSON.stringify(toJson(repo), null, 2);
+      format === "sarif" ? JSON.stringify(toSarif(repo, pkg.version, locale), null, 2) : format === "md" ? toMarkdown(repo, locale) : JSON.stringify(toJson(repo, locale), null, 2);
   }
   const filename = `repoguard-${repo.fullName.replace(/[^\w.-]+/g, "_")}.${ext}`;
   return new Response(body, {
