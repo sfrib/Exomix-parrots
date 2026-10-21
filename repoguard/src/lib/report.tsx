@@ -175,7 +175,9 @@ export function renderReport(repo: Repo, allFindings: Finding[], suppressions: S
   const counts = countBySeverity(findings);
   const score = computeScore(findings, { code: Boolean(repo.lastCodeScanAt), deps: Boolean(repo.lastDepScanAt) });
   const generated = formatDateTime(new Date());
-  const code = findings.filter((f) => f.kind === "code" && categoryOf(f) !== "agent");
+  const malware = findings.filter((f) => categoryOf(f) === "malware");
+  const code = findings.filter((f) => f.kind === "code" && categoryOf(f) === "code");
+  const secrets = findings.filter((f) => categoryOf(f) === "secrets");
   const agent = findings.filter((f) => categoryOf(f) === "agent");
   const deps = findings.filter((f) => f.kind === "dependency");
   const repoFindings = findings.filter((f) => f.kind === "repo");
@@ -213,11 +215,13 @@ export function renderReport(repo: Repo, allFindings: Finding[], suppressions: S
           </View>
         ) : null}
         <Text style={{ marginTop: 8 }}>
-          Kód a klíče: {code.length} · AI agenti a CI: {agent.length} · Závislosti: {deps.length} · Nastavení repozitáře: {repoFindings.length}
+          Detekce napadení: {malware.length} · Kód: {code.length} · Tajné klíče: {secrets.length} · AI agenti a CI: {agent.length} ·
+          Závislosti: {deps.length} · Nastavení repozitáře: {repoFindings.length}
           {suppressed.length ? ` · Potlačeno: ${suppressed.length}` : ""}
         </Text>
 
-        <Section title="Nálezy ve zdrojovém kódu" findings={code} empty="Žádné nálezy." />
+        <Section title="Detekce napadení (webshelly a zadní vrátka)" findings={malware} empty="Žádné známky napadení." />
+        <Section title="Nálezy ve zdrojovém kódu" findings={[...code, ...secrets]} empty="Žádné nálezy." />
         <Section title="Konfigurace AI agentů a CI" findings={agent} empty="Žádné nálezy." />
         <Section title="Zranitelné závislosti (CVE)" findings={deps} empty="Žádné známé zranitelnosti." />
         <Section title="Nastavení repozitáře" findings={repoFindings} empty="Bez doporučení." />

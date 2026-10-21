@@ -3,12 +3,13 @@ import { phpRules } from "./php";
 import { jsRules } from "./js";
 import { secretRules } from "./secrets";
 import { agentRules, ciRules } from "./agent";
+import { malwareRules } from "./malware";
 
 /**
  * All active rules. To add a rule, append a LineRule (regex per line) or a
  * FileRule (custom check over the whole file) to one of the rule sets, or add
  * a new set here for another language.
  */
-export const ALL_RULES: Rule[] = [...phpRules, ...jsRules, ...secretRules, ...agentRules, ...ciRules];
+export const ALL_RULES: Rule[] = [...phpRules, ...jsRules, ...secretRules, ...agentRules, ...ciRules, ...malwareRules];
 
-export { phpRules, jsRules, secretRules, agentRules, ciRules };
+export { phpRules, jsRules, secretRules, agentRules, ciRules, malwareRules };

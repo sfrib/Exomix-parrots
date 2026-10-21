@@ -6,10 +6,11 @@ import { isSeverity, type Severity } from "./severity";
  * the categories that were checked. Graded A–F like AgentShield.
  */
 
-export const CATEGORIES = ["code", "secrets", "agent", "deps", "repo"] as const;
+export const CATEGORIES = ["malware", "code", "secrets", "agent", "deps", "repo"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export const CATEGORY_LABEL_CS: Record<Category, string> = {
+  malware: "Detekce napadení",
   code: "Kód",
   secrets: "Tajné klíče",
   agent: "AI agenti a CI",
@@ -26,6 +27,7 @@ export function categoryOf(f: { kind: string; ruleId: string }): Category {
   if (f.kind === "repo") return "repo";
   if (f.ruleId.startsWith("secret.")) return "secrets";
   if (f.ruleId.startsWith("agent.") || f.ruleId.startsWith("ci.")) return "agent";
+  if (f.ruleId.startsWith("malware.")) return "malware";
   return "code";
 }
 
@@ -48,7 +50,7 @@ export function computeScore(
   checked: { code: boolean; deps: boolean },
 ): ScoreResult | null {
   const active: Category[] = [
-    ...(checked.code ? (["code", "secrets", "agent", "repo"] as const) : []),
+    ...(checked.code ? (["malware", "code", "secrets", "agent", "repo"] as const) : []),
     ...(checked.deps ? (["deps"] as const) : []),
   ];
   if (active.length === 0) return null;

@@ -48,13 +48,14 @@ describe("computeScore", () => {
     ];
     const r = computeScore(findings, { code: true, deps: true })!;
     expect(r.categories.map((c) => [c.category, c.score])).toEqual([
+      ["malware", 100],
       ["code", 75],
       ["secrets", 85],
       ["agent", 100],
       ["repo", 98],
       ["deps", 95],
     ]);
-    expect(r.score).toBe(91);
+    expect(r.score).toBe(92);
     expect(r.grade).toBe("A");
     expect(computeScore([], { code: false, deps: false })).toBeNull();
     expect([95, 80, 65, 45, 10].map(gradeFor)).toEqual(["A", "B", "C", "D", "F"]);
@@ -62,7 +63,8 @@ describe("computeScore", () => {
 
   it("floors a category at zero", () => {
     const many = Array.from({ length: 6 }, () => ({ kind: "code", ruleId: "php.sqli", severity: "critical" }));
-    expect(computeScore(many, { code: true, deps: false })!.categories[0].score).toBe(0);
+    const codeCat = computeScore(many, { code: true, deps: false })!.categories.find((c) => c.category === "code")!;
+    expect(codeCat.score).toBe(0);
   });
 });
 

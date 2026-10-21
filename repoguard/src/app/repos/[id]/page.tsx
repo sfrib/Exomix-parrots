@@ -17,9 +17,10 @@ import { disconnectRepo, saveExcludes, scanRepo } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "code" | "agent" | "deps" | "repo" | "threats" | "inventory" | "history" | "suppressed";
+type Tab = "malware" | "code" | "agent" | "deps" | "repo" | "threats" | "inventory" | "history" | "suppressed";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "malware", label: "Detekce napadení" },
   { id: "code", label: "Kód a klíče" },
   { id: "agent", label: "AI agenti a CI" },
   { id: "deps", label: "Závislosti (CVE)" },
@@ -31,6 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const TAB_CATEGORIES: Partial<Record<Tab, Category[]>> = {
+  malware: ["malware"],
   code: ["code", "secrets"],
   agent: ["agent"],
   deps: ["deps"],
@@ -38,6 +40,7 @@ const TAB_CATEGORIES: Partial<Record<Tab, Category[]>> = {
 };
 
 const EMPTY_TEXT: Partial<Record<Tab, string>> = {
+  malware: "Nebyly nalezeny žádné známky napadení (webshelly, zadní vrátka, obfuskovaný kód). Není to záruka – pravidelně kontrolujte a držte web aktualizovaný.",
   code: "Ve zdrojovém kódu nebyla nalezena žádná slabá místa ani uložená hesla.",
   agent:
     "V konfiguraci AI agentů (CLAUDE.md, .claude/, .mcp.json, .cursorrules…) ani v GitHub Actions nebyly nalezeny žádné problémy.",
@@ -78,6 +81,7 @@ export default async function RepoDetail({
   const suppressionOf = new Map(repo.suppressions.map((s) => [s.fingerprint, s]));
 
   const counts: Record<Tab, number> = {
+    malware: inTab("malware").length,
     code: inTab("code").length,
     agent: inTab("agent").length,
     deps: inTab("deps").length,
@@ -184,7 +188,7 @@ export default async function RepoDetail({
         ))}
       </nav>
 
-      {(tab === "code" || tab === "agent" || tab === "repo") && (
+      {(tab === "malware" || tab === "code" || tab === "agent" || tab === "repo") && (
         <FindingList findings={inTab(tab)} scanned={Boolean(repo.lastCodeScanAt)} emptyText={EMPTY_TEXT[tab]!} {...listProps(tab)} />
       )}
       {tab === "deps" && (

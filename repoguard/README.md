@@ -1,11 +1,14 @@
 # RepoGuard
 
+> **Standalone project** (MIT licensed). This folder is self-contained — copy it into its own Git repository to publish it. It was developed alongside, but does not depend on, the ExoMix app.
+
 A defensive security scanner for **your own** GitHub repositories. It finds common weaknesses in PHP/WordPress and JavaScript/TypeScript code, audits AI coding-agent configuration (Claude Code, MCP, Cursor) and GitHub Actions, checks repository security settings, and alerts you when a dependency has a known vulnerability (CVE). The UI is in Czech.
 
 Main features:
 
 - **Code scan:** SQL injection, XSS / unsanitised input, missing authorisation, insecure uploads, hardcoded secrets and dangerous functions, each with CWE, file:line, a plain-language explanation and a fix.
 - **AI agent & CI audit:** inspired by [AgentShield](https://github.com/affaan-m/agentshield) from *Everything Claude Code*. Checks `.claude/settings.json` permissions and hooks, `.mcp.json` servers, `CLAUDE.md` / `AGENTS.md` / Cursor rules for hidden prompt injection, VS Code auto-run tasks, and risky GitHub Actions patterns.
+- **Compromise detection:** flags signs that a site is already hacked — webshells, obfuscated `eval`/decode chains, request-controlled callbacks, backdoor admin accounts, PHP files dropped in `uploads/` — with incident-response guidance. Detection only; no attack code.
 - **Dependency CVEs** via OSV.dev, with CVSS score, fixed version and upgrade command.
 - **Repository settings:** Dependabot alerts, secret scanning, branch protection, `SECURITY.md`, dependency update config, `.env` in `.gitignore`.
 - **Security score 0–100 and grade A–F** per category.
