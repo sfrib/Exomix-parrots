@@ -4,6 +4,7 @@ import { getFileContent, getRepoById, hasScanAccess } from "./github";
 import { partitionSuppressed } from "./findings";
 import { AI_MODEL } from "./ai-review";
 import { ThreatModelError, buildContext, buildFindingRefs, pickExcerptTargets, runPipeline } from "./threat-model";
+import { mapLimit } from "./concurrency";
 
 const STALE_MS = 20 * 60 * 1000;
 
@@ -39,13 +40,14 @@ export async function executeThreatModel(threatModelId: string, locale: "en" | "
       const token = tokenFor(repo.user);
       const remote = await getRepoById(token, repo.githubId);
       if (!hasScanAccess(remote, repo.user.login)) throw new ThreatModelError("K repozitáři už nemáte přístup.");
-      for (const t of targets) {
+      const fetched = await mapLimit(targets, 6, async (target) => {
         try {
-          excerpts.push({ ...t, content: await getFileContent(token, remote.full_name, t.file, repo.lastCommitSha) });
+          return { ...target, content: await getFileContent(token, remote.full_name, target.file, repo.lastCommitSha!) };
         } catch {
-          // A missing file only reduces context.
+          return null; // A missing file only reduces context.
         }
-      }
+      });
+      for (const e of fetched) if (e) excerpts.push(e);
     }
 
     const context = buildContext(repo, active, refs, excerpts);

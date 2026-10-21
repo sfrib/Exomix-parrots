@@ -5,6 +5,7 @@ import { annotatablePaths, buildAnnotationPatch } from "@/lib/annotate";
 import { GitHubError, getFileContent, getRepoById, hasScanAccess } from "@/lib/github";
 import { tokenFor } from "@/lib/session";
 import { getLocale } from "@/lib/i18n/server";
+import { mapLimit } from "@/lib/concurrency";
 import pkg from "../../../../../../package.json";
 
 export const runtime = "nodejs";
@@ -39,15 +40,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const token = tokenFor(user);
       const remote = await getRepoById(token, repo.githubId);
       if (!hasScanAccess(remote, user.login)) return new Response("K repozitáři už nemáte přístup.", { status: 403 });
-      const files = [];
-      for (const path of paths) {
+      const fetched = await mapLimit(paths, 8, async (path) => {
         try {
-          files.push({ path, content: await getFileContent(token, remote.full_name, path, repo.lastCommitSha) });
+          return { path, content: await getFileContent(token, remote.full_name, path, repo.lastCommitSha!) };
         } catch {
-          // skip unreadable file
+          return null; // skip unreadable/too-large file
         }
-      }
-      body = buildAnnotationPatch(files, active, repo.htmlUrl, repo.lastCommitSha);
+      });
+      body = buildAnnotationPatch(fetched.filter((x): x is { path: string; content: string } => x !== null), active, repo.htmlUrl, repo.lastCommitSha);
     } catch (err) {
       const status = err instanceof GitHubError ? err.status : 502;
       return new Response(err instanceof Error ? err.message : "Nepodařilo se načíst soubory z GitHubu.", { status });

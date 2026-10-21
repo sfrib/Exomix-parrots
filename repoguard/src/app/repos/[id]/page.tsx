@@ -15,6 +15,7 @@ import { GradeBadge, SeverityCounts, StatusBadge } from "@/components/Badges";
 import { ActionForm } from "@/components/ActionForm";
 import { FindingCard } from "@/components/FindingCard";
 import { ThreatModelView } from "@/components/ThreatModelView";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { disconnectRepo, saveExcludes, scanRepo } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -196,7 +197,12 @@ export default async function RepoDetail({
         </div>
       </details>
 
-      {running && <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-800">{t("detail.scanning", locale)}</p>}
+      {running && (
+        <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-800">
+          <AutoRefresh />
+          {t("detail.scanning", locale)}
+        </p>
+      )}
       {lastFailed && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
           {t("detail.lastScanFailed", locale)} ({formatDateTime(lastFailed.startedAt, locale)}) {t("detail.failedWith", locale)}: {lastFailed.error}

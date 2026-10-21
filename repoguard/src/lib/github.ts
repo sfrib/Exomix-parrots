@@ -107,9 +107,13 @@ export async function isBranchProtected(token: string, fullName: string, branch:
 }
 
 /** Raw content of one file at a commit, used for AI review context. */
+const MAX_SINGLE_FILE_BYTES = 1_000_000;
+
 export async function getFileContent(token: string, fullName: string, path: string, ref: string): Promise<string> {
   const encoded = path.split("/").map(encodeURIComponent).join("/");
   const res = await gh(token, `/repos/${fullName}/contents/${encoded}?ref=${encodeURIComponent(ref)}`, "application/vnd.github.raw+json");
+  const size = Number(res.headers.get("content-length") ?? 0);
+  if (size > MAX_SINGLE_FILE_BYTES) throw new GitHubError("Soubor je příliš velký.", 413);
   return res.text();
 }
 
