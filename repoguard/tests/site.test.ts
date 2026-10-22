@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeOrigin, SiteFetchError, type SiteFetch, type SiteResponse } from "@/lib/site/fetch";
 import { auditSite, scoreSite } from "@/lib/site/audit";
+import type { CertInfo, CertProvider } from "@/lib/site/fetch";
 
 function resp(over: { status?: number; body?: string; url?: string; redirectedToHttps?: boolean; headers?: Record<string, string>; cookies?: string[] }): SiteResponse {
   const h = new Headers(over.headers ?? {});
@@ -71,6 +72,7 @@ describe("auditSite", () => {
     const fetcher: SiteFetch = async (url) => {
       if (url === "https://ok.example") return secure;
       if (url === "http://ok.example") return resp({ status: 301, redirectedToHttps: true });
+      if (url.endsWith("/.well-known/security.txt")) return resp({ status: 200, body: "Contact: mailto:x@y" });
       return resp({ status: 404 });
     };
     const { findings } = await auditSite("https://ok.example", fetcher, "en");
@@ -92,6 +94,58 @@ describe("auditSite", () => {
   });
 });
 
+
+describe("auditSite — deeper checks", () => {
+  function cert(over: Partial<CertInfo>): CertProvider {
+    return async () => ({
+      validFrom: new Date(Date.now() - 86400000),
+      validTo: new Date(Date.now() + 90 * 86400000),
+      daysRemaining: 90,
+      issuer: "R3",
+      subjectCN: "demo.example",
+      altNames: ["demo.example"],
+      selfSigned: false,
+      hostnameMatches: true,
+      ...over,
+    });
+  }
+  const headers = { "content-security-policy": "x", "strict-transport-security": "max-age=99999999", "x-content-type-options": "nosniff", "x-frame-options": "x", "referrer-policy": "x" };
+  const okFetcher: SiteFetch = async (url) => {
+    if (url.startsWith("http://")) return resp({ status: 301, redirectedToHttps: true });
+    const key = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+    if (key === "/") return resp({ headers, cookies: ["sid=a; Secure; HttpOnly; SameSite=Lax"] });
+    if (key === "/.well-known/security.txt") return resp({ status: 200, body: "Contact: mailto:x@y" });
+    return resp({ status: 404 });
+  };
+
+  it("flags an expiring and hostname-mismatched certificate", async () => {
+    const { findings } = await auditSite("https://demo.example", okFetcher, "en", cert({ daysRemaining: 5, validTo: new Date(Date.now() + 5 * 86400000) }));
+    expect(findings.map((f) => f.id)).toContain("site.tls.expiring");
+    const mism = await auditSite("https://demo.example", okFetcher, "en", cert({ hostnameMatches: false, subjectCN: "other.example" }));
+    expect(mism.findings.map((f) => f.id)).toContain("site.tls.hostname");
+  });
+
+  it("flags weak CSP, short HSTS, mixed content, dir listing and missing security.txt", async () => {
+    const fetcher: SiteFetch = async (url) => {
+      const key = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+      if (key === "/") return resp({ headers: { "content-security-policy": "default-src 'self' 'unsafe-inline'", "strict-transport-security": "max-age=3600", "x-content-type-options": "n", "x-frame-options": "x", "referrer-policy": "x" }, cookies: ["sid=a; Secure; HttpOnly"], body: '<img src="http://cdn.example/a.png">' });
+      if (key === "/wp-content/uploads/") return resp({ status: 200, body: "<title>Index of /wp-content/uploads</title>" });
+      if (key === "/.well-known/security.txt") return resp({ status: 404 });
+      return resp({ status: 404 });
+    };
+    const ids = (await auditSite("https://demo.example", fetcher, "en", cert({}))).findings.map((f) => f.id);
+    expect(ids).toContain("site.csp.weak");
+    expect(ids).toContain("site.hsts.short");
+    expect(ids).toContain("site.mixed-content");
+    expect(ids).toContain("site.dir-listing");
+    expect(ids).toContain("site.no-security-txt");
+  });
+
+  it("a fully clean site with a good cert has no findings", async () => {
+    const { findings } = await auditSite("https://demo.example", okFetcher, "en", cert({}));
+    expect(findings).toEqual([]);
+  });
+});
 describe("scoreSite", () => {
   it("deducts by severity and grades", () => {
     expect(scoreSite([{ id: "a", severity: "critical", title: "", explanation: "", fix: "" }]).score).toBe(75);

@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { liveFetch } from "./fetch";
+import { liveFetch, liveCert } from "./fetch";
 import { auditSite, scoreSite } from "./audit";
 import type { Locale } from "../i18n/locale";
 
@@ -21,7 +21,7 @@ export async function executeSiteAudit(auditId: string, locale: Locale = "en"): 
   if (!audit) return;
   try {
     const { site } = audit;
-    const result = await auditSite(site.origin, liveFetch, locale);
+    const result = await auditSite(site.origin, liveFetch, locale, liveCert);
     if (!result.reachable) throw new Error(locale === "cs" ? "Web je nedostupný." : "The site is unreachable.");
     const { score, grade } = scoreSite(result.findings);
     const now = new Date();

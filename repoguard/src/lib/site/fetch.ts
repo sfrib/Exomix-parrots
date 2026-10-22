@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import tls from "node:tls";
 
 /**
  * SSRF-safe HTTP(S) fetch for the website auditor. The auditor only ever talks
@@ -104,3 +105,54 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
   const buf = await res.arrayBuffer();
   return Buffer.from(buf.slice(0, maxBytes)).toString("utf8");
 }
+
+export interface CertInfo {
+  validFrom: Date;
+  validTo: Date;
+  daysRemaining: number;
+  issuer: string;
+  subjectCN: string;
+  altNames: string[];
+  selfSigned: boolean;
+  hostnameMatches: boolean;
+}
+
+export type CertProvider = (host: string) => Promise<CertInfo | null>;
+
+/** Reads the TLS certificate via a handshake (passive). Blocks private targets first. */
+export const liveCert: CertProvider = async (host) => {
+  await assertPublicHost(host);
+  return new Promise<CertInfo | null>((resolve) => {
+    const socket = tls.connect({ host, port: 443, servername: host, timeout: DEFAULT_TIMEOUT_MS, rejectUnauthorized: false }, () => {
+      const cert = socket.getPeerCertificate();
+      const authorized = socket.authorized;
+      socket.end();
+      if (!cert || !cert.valid_to) return resolve(null);
+      const validTo = new Date(cert.valid_to);
+      const validFrom = new Date(cert.valid_from);
+      const altNames = (cert.subjectaltname ?? "")
+        .split(",")
+        .map((s) => s.trim().replace(/^DNS:/, ""))
+        .filter(Boolean);
+      const subjectCN = (cert.subject && typeof cert.subject === "object" ? (cert.subject as { CN?: string }).CN : undefined) ?? "";
+      const issuerCN = (cert.issuer && typeof cert.issuer === "object" ? (cert.issuer as { CN?: string }).CN : undefined) ?? "";
+      const matchOne = (pattern: string) =>
+        pattern === host || (pattern.startsWith("*.") && host.endsWith(pattern.slice(1)) && host.split(".").length === pattern.split(".").length);
+      resolve({
+        validFrom,
+        validTo,
+        daysRemaining: Math.floor((validTo.getTime() - Date.now()) / 86_400_000),
+        issuer: issuerCN,
+        subjectCN,
+        altNames,
+        selfSigned: Boolean(issuerCN && subjectCN && issuerCN === subjectCN) || !authorized,
+        hostnameMatches: [subjectCN, ...altNames].some(matchOne),
+      });
+    });
+    socket.on("error", () => resolve(null));
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(null);
+    });
+  });
+};

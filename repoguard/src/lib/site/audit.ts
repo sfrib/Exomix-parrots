@@ -1,7 +1,7 @@
 import type { Severity } from "../severity";
 import type { Locale } from "../i18n/locale";
 import { mapLimit } from "../concurrency";
-import { type SiteFetch, type SiteResponse } from "./fetch";
+import { type SiteFetch, type SiteResponse, type CertProvider, type CertInfo } from "./fetch";
 
 /**
  * Passive live-website security audit. It performs a small, fixed set of
@@ -100,6 +100,10 @@ const SENSITIVE_PATHS: { path: string; id: string; severity: Severity; title: L;
   { path: "/.svn/entries", id: "site.exposed.svn", severity: "high", title: { en: "Exposed .svn directory", cs: "Vystavený adresář .svn" } },
   { path: "/server-status", id: "site.exposed.serverstatus", severity: "medium", title: { en: "Apache server-status exposed", cs: "Vystavený Apache server-status" }, mustContain: /Apache Server Status|Server uptime/i },
   { path: "/phpinfo.php", id: "site.exposed.phpinfo", severity: "medium", title: { en: "phpinfo() page exposed", cs: "Vystavená stránka phpinfo()" }, mustContain: /phpinfo\(\)|PHP Version/i },
+  { path: "/.git/config", id: "site.exposed.gitconfig", severity: "high", title: { en: "Exposed .git/config", cs: "Vystavený .git/config" }, mustContain: /\[core\]|\[remote/ },
+  { path: "/.env.local", id: "site.exposed.envlocal", severity: "critical", title: { en: "Exposed .env.local file", cs: "Vystavený soubor .env.local" }, mustContain: /[A-Z0-9_]+=/ },
+  { path: "/adminer.php", id: "site.exposed.adminer", severity: "high", title: { en: "Adminer database tool exposed", cs: "Vystavený nástroj Adminer" }, mustContain: /Adminer|Login - Adminer/i },
+  { path: "/backup.zip", id: "site.exposed.backup", severity: "high", title: { en: "Exposed backup archive", cs: "Vystavený zálohový archiv" }, mustContain: /PK\x03\x04|PK/ },
 ];
 
 const EXPOSED_FIX: L = {
@@ -155,6 +159,118 @@ function infoDisclosure(home: SiteResponse, locale: Locale): SiteFinding[] {
   return out;
 }
 
+
+function headerQualityFindings(home: SiteResponse, locale: Locale): SiteFinding[] {
+  const out: SiteFinding[] = [];
+  const csp = home.headers.get("content-security-policy");
+  if (csp && /unsafe-inline|unsafe-eval/i.test(csp)) {
+    out.push({
+      id: "site.csp.weak",
+      severity: "low",
+      title: pick({ en: "Weak Content-Security-Policy (unsafe-inline/eval)", cs: "Slabá Content-Security-Policy (unsafe-inline/eval)" }, locale),
+      explanation: pick(
+        { en: "The CSP allows 'unsafe-inline' or 'unsafe-eval', which lets injected inline scripts run — so the policy no longer blocks most XSS.", cs: "CSP povoluje 'unsafe-inline' nebo 'unsafe-eval', takže vložené inline skripty poběží – politika pak většinu XSS nezastaví." },
+        locale,
+      ),
+      fix: pick({ en: "Remove unsafe-inline/unsafe-eval; use nonces or hashes for the scripts you need.", cs: "Odstraňte unsafe-inline/unsafe-eval; pro potřebné skripty použijte nonce nebo hash." }, locale),
+    });
+  }
+  const hsts = home.headers.get("strict-transport-security");
+  const maxAge = hsts?.match(/max-age=(\d+)/i)?.[1];
+  if (hsts && maxAge && Number(maxAge) < 15_552_000) {
+    out.push({
+      id: "site.hsts.short",
+      severity: "low",
+      title: pick({ en: "HSTS max-age is too short", cs: "HSTS max-age je příliš krátký" }, locale),
+      explanation: pick(
+        { en: "A short HSTS max-age means browsers soon forget to force HTTPS, reopening the downgrade window.", cs: "Krátký HSTS max-age znamená, že prohlížeče brzy zapomenou vynucovat HTTPS a okno pro downgrade se znovu otevře." },
+        locale,
+      ),
+      fix: pick({ en: "Use max-age of at least 15552000 (180 days), ideally 31536000 with includeSubDomains.", cs: "Použijte max-age alespoň 15552000 (180 dní), ideálně 31536000 s includeSubDomains." }, locale),
+      evidence: `max-age=${maxAge}`,
+    });
+  }
+  const acao = home.headers.get("access-control-allow-origin");
+  const acac = home.headers.get("access-control-allow-credentials");
+  if (acao === "*" && /true/i.test(acac ?? "")) {
+    out.push({
+      id: "site.cors.wildcard",
+      severity: "medium",
+      title: pick({ en: "CORS allows any origin with credentials", cs: "CORS povoluje libovolný původ s přihlášením" }, locale),
+      explanation: pick(
+        { en: "Access-Control-Allow-Origin: * together with credentials lets any site read authenticated responses on behalf of your users.", cs: "Access-Control-Allow-Origin: * spolu s přihlašovacími údaji umožní libovolnému webu číst autentizované odpovědi jménem vašich uživatelů." },
+        locale,
+      ),
+      fix: pick({ en: "Reflect only specific allowed origins instead of '*' when credentials are used.", cs: "Při použití přihlašování vracejte jen konkrétní povolené původy místo '*'." }, locale),
+    });
+  }
+  return out;
+}
+
+function mixedContentFindings(origin: string, home: SiteResponse, locale: Locale): SiteFinding[] {
+  if (!origin.startsWith("https:")) return [];
+  const matches = [...home.body.matchAll(/\b(?:src|href)\s*=\s*["'](http:\/\/[^"']+)/gi)].map((m) => m[1]);
+  const external = matches.filter((u) => !/\.(css)(\?|$)/i.test(u)); // keep it simple; any http resource counts
+  if (external.length === 0) return [];
+  return [
+    {
+      id: "site.mixed-content",
+      severity: "medium",
+      title: pick({ en: "Mixed content (HTTP resources on an HTTPS page)", cs: "Mixed content (HTTP zdroje na HTTPS stránce)" }, locale),
+      explanation: pick(
+        { en: "The HTTPS page loads resources over plain HTTP. Browsers may block them, and an attacker on the network can tamper with those requests.", cs: "HTTPS stránka načítá zdroje přes nešifrované HTTP. Prohlížeče je mohou blokovat a útočník v síti je může měnit." },
+        locale,
+      ),
+      fix: pick({ en: "Load all resources over https:// (or protocol-relative), and add CSP: upgrade-insecure-requests.", cs: "Načítejte všechny zdroje přes https:// (nebo protokolově relativně) a přidejte CSP: upgrade-insecure-requests." }, locale),
+      evidence: external.slice(0, 3).join(", "),
+    },
+  ];
+}
+
+function certFindings(host: string, cert: CertInfo | null, locale: Locale): SiteFinding[] {
+  if (!cert) return [];
+  const out: SiteFinding[] = [];
+  if (cert.daysRemaining < 0) {
+    out.push({
+      id: "site.tls.expired",
+      severity: "high",
+      title: pick({ en: "TLS certificate has expired", cs: "TLS certifikát vypršel" }, locale),
+      explanation: pick({ en: "The certificate is no longer valid, so visitors get a security warning and may not reach the site.", cs: "Certifikát už není platný, návštěvníci dostanou bezpečnostní varování a na web se nemusí dostat." }, locale),
+      fix: pick({ en: "Renew the certificate now (e.g. Let's Encrypt auto-renewal).", cs: "Certifikát ihned obnovte (např. automatická obnova Let's Encrypt)." }, locale),
+      evidence: `valid to ${cert.validTo.toISOString().slice(0, 10)}`,
+    });
+  } else if (cert.daysRemaining <= 14) {
+    out.push({
+      id: "site.tls.expiring",
+      severity: "medium",
+      title: pick({ en: `TLS certificate expires in ${cert.daysRemaining} days`, cs: `TLS certifikát vyprší za ${cert.daysRemaining} dní` }, locale),
+      explanation: pick({ en: "The certificate expires soon; if renewal fails the site will show a security warning.", cs: "Certifikát brzy vyprší; pokud obnova selže, web bude hlásit bezpečnostní varování." }, locale),
+      fix: pick({ en: "Make sure automatic renewal is set up and working.", cs: "Ověřte, že automatická obnova funguje." }, locale),
+      evidence: `valid to ${cert.validTo.toISOString().slice(0, 10)}`,
+    });
+  }
+  if (cert.selfSigned) {
+    out.push({
+      id: "site.tls.self-signed",
+      severity: "high",
+      title: pick({ en: "Self-signed or untrusted TLS certificate", cs: "Self-signed nebo nedůvěryhodný TLS certifikát" }, locale),
+      explanation: pick({ en: "The certificate is not signed by a trusted authority, so browsers warn visitors and the encryption cannot be trusted against impersonation.", cs: "Certifikát není podepsaný důvěryhodnou autoritou, prohlížeče proto varují a šifrování nechrání proti podvržení serveru." }, locale),
+      fix: pick({ en: "Use a certificate from a trusted CA (Let's Encrypt is free and automatic).", cs: "Použijte certifikát od důvěryhodné CA (Let's Encrypt je zdarma a automatický)." }, locale),
+    });
+  }
+  if (!cert.hostnameMatches && cert.subjectCN) {
+    out.push({
+      id: "site.tls.hostname",
+      severity: "medium",
+      title: pick({ en: "TLS certificate does not match the hostname", cs: "TLS certifikát neodpovídá názvu domény" }, locale),
+      explanation: pick({ en: "The certificate is not issued for this hostname, so browsers warn and the connection may be trivially intercepted.", cs: "Certifikát není vystavený pro tuto doménu, prohlížeče proto varují a spojení lze snadno odposlechnout." }, locale),
+      fix: pick({ en: "Issue a certificate that covers this hostname (or add it to the SAN list).", cs: "Vystavte certifikát pokrývající tuto doménu (nebo ji přidejte do SAN)." }, locale),
+      evidence: `CN=${cert.subjectCN}`,
+    });
+  }
+  return out;
+}
+
 export interface SiteAuditResult {
   findings: SiteFinding[];
   reachable: boolean;
@@ -162,7 +278,7 @@ export interface SiteAuditResult {
 }
 
 /** Runs the passive audit against a verified origin. `fetcher` is injectable for testing. */
-export async function auditSite(origin: string, fetcher: SiteFetch, locale: Locale = "en"): Promise<SiteAuditResult> {
+export async function auditSite(origin: string, fetcher: SiteFetch, locale: Locale = "en", certProvider?: CertProvider): Promise<SiteAuditResult> {
   const httpOrigin = origin.replace(/^https:/, "http:");
   const findings: SiteFinding[] = [];
 
@@ -204,7 +320,59 @@ export async function auditSite(origin: string, fetcher: SiteFetch, locale: Loca
     }
   }
 
-  findings.push(...cookieFindings(home, locale), ...infoDisclosure(home, locale));
+  findings.push(...cookieFindings(home, locale), ...infoDisclosure(home, locale), ...headerQualityFindings(home, locale), ...mixedContentFindings(origin, home, locale));
+
+  // TLS certificate (passive handshake)
+  if (origin.startsWith("https:") && certProvider) {
+    try {
+      const host = new URL(origin).hostname;
+      findings.push(...certFindings(host, await certProvider(host), locale));
+    } catch {
+      // ignore cert errors
+    }
+  }
+
+  // security.txt recommendation (absence only)
+  try {
+    const sec = await fetcher(origin + "/.well-known/security.txt", { maxBytes: 4096 });
+    if (sec.status !== 200 || !/contact/i.test(sec.body)) {
+      findings.push({
+        id: "site.no-security-txt",
+        severity: "low",
+        title: pick({ en: "Missing security.txt", cs: "Chybí security.txt" }, locale),
+        explanation: pick(
+          { en: "There is no /.well-known/security.txt, so a researcher who finds a vulnerability has no clear way to report it to you.", cs: "Chybí /.well-known/security.txt, takže ten, kdo najde zranitelnost, nemá jak vám ji bezpečně nahlásit." },
+          locale,
+        ),
+        fix: pick({ en: "Publish /.well-known/security.txt with a Contact: line (see securitytxt.org).", cs: "Zveřejněte /.well-known/security.txt s řádkem Contact: (viz securitytxt.org)." }, locale),
+      });
+    }
+  } catch {
+    // network issue: skip
+  }
+
+  // Directory listing on common upload dirs
+  for (const dir of ["/wp-content/uploads/", "/uploads/", "/files/"]) {
+    try {
+      const res = await fetcher(origin + dir, { maxBytes: 16 * 1024 });
+      if (res.status === 200 && /<title>\s*Index of|<h1>\s*Index of/i.test(res.body)) {
+        findings.push({
+          id: "site.dir-listing",
+          severity: "medium",
+          title: pick({ en: "Directory listing is enabled", cs: "Je zapnutý výpis obsahu adresáře" }, locale),
+          explanation: pick(
+            { en: `The directory ${dir} shows a listing of all its files, so anyone can browse uploads, backups or logs stored there.`, cs: `Adresář ${dir} ukazuje výpis všech souborů, takže kdokoli může procházet nahrané soubory, zálohy nebo logy.` },
+            locale,
+          ),
+          fix: pick({ en: "Turn off directory listing (Apache: Options -Indexes; Nginx: autoindex off).", cs: "Vypněte výpis adresářů (Apache: Options -Indexes; Nginx: autoindex off)." }, locale),
+          evidence: `GET ${dir} → Index of`,
+        });
+        break;
+      }
+    } catch {
+      // skip
+    }
+  }
 
   // Sensitive path probes (bounded concurrency)
   const probes = await mapLimit(SENSITIVE_PATHS, 4, async (p) => {
