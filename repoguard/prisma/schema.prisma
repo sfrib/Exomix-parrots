@@ -18,6 +18,7 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   repos          Repo[]
+  sites          Site[]
 }
 
 model Repo {
@@ -42,6 +43,41 @@ model Repo {
   threatModels   ThreatModel[]
 
   @@unique([userId, githubId])
+}
+
+/** A live website the user has verified they own, for passive security auditing. */
+model Site {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  origin      String // normalized https origin, e.g. https://example.com
+  host        String
+  verified    Boolean     @default(false)
+  // Random token the owner publishes (file or DNS TXT) to prove control
+  verifyToken String
+  verifiedAt  DateTime?
+  lastScore   Int?
+  lastGrade   String?
+  lastAuditAt DateTime?
+  createdAt   DateTime    @default(now())
+  audits      SiteAudit[]
+
+  @@unique([userId, origin])
+}
+
+model SiteAudit {
+  id         String    @id @default(cuid())
+  siteId     String
+  site       Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  status     String // "running" | "done" | "failed"
+  score      Int?
+  grade      String?
+  findings   String    @default("[]") // JSON array of SiteFinding (src/lib/site/audit.ts)
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([siteId, startedAt])
 }
 
 model Scan {

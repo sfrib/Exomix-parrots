@@ -36,6 +36,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <span className="sm:hidden">{t("nav.addShort", locale)}</span>
                     <span className="hidden sm:inline">{t("nav.addRepo", locale)}</span>
                   </Link>
+                  <Link href="/sites" className="text-slate-600 hover:text-slate-900">
+                    {t("nav.sites", locale)}
+                  </Link>
                   <span className="flex items-center gap-2 text-slate-700">
                     {user.avatarUrl && <Image src={user.avatarUrl} alt="" width={24} height={24} className="rounded-full" />}
                     <span className="hidden sm:inline">{user.login}</span>

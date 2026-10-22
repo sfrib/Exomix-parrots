@@ -24,6 +24,10 @@ const FEATURES: { en: [string, string]; cs: [string, string] }[] = [
     cs: ["Zabezpečení webu", "Vystavené zálohy a databázové exporty, nebezpečné .htaccess direktivy, ladicí logy, nástroje typu Adminer a zjevně zastaralé pluginy či jádro WordPressu."],
   },
   {
+    en: ["Live website audit", "For domains you own (ownership verified): security headers, HTTPS, cookie flags and publicly exposed files on a live site. Passive and SSRF-safe — no attacks."],
+    cs: ["Audit živého webu", "Pro domény, které vlastníte (po ověření): bezpečnostní hlavičky, HTTPS, cookies a veřejně vystavené soubory na živém webu. Pasivní a bezpečné – žádné útoky."],
+  },
+  {
     en: ["CVE monitoring", "Checks composer, npm and Python dependencies against the OSV.dev database, including CVSS score and the fixed version."],
     cs: ["Hlídání CVE", "Kontrola composer, npm a Python závislostí proti databázi OSV.dev včetně skóre CVSS a opravené verze."],
   },

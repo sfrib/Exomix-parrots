@@ -13,6 +13,7 @@ export const MESSAGES = {
   "nav.addRepo": { en: "Add repository", cs: "Přidat repozitář" },
   "nav.addShort": { en: "+ Add", cs: "+ Přidat" },
   "nav.signOut": { en: "Sign out", cs: "Odhlásit" },
+  "nav.sites": { en: "Websites", cs: "Weby" },
   "auth.signIn": { en: "Sign in with GitHub", cs: "Přihlásit se přes GitHub" },
 
   "home.heading": { en: "Security check for your repositories", cs: "Bezpečnostní kontrola vašich repozitářů" },
