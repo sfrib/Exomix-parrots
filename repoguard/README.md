@@ -23,6 +23,41 @@ Main features:
 
 RepoGuard only **reports and explains** issues. It never generates or runs exploit code, and it only scans repositories the signed-in user owns or has been granted access to.
 
+## ⚠️ Responsible use & disclaimer
+
+> **Use RepoGuard only on your own systems — or ones you have written permission to test.**
+> It is provided **"as is", with no warranty and no liability**: you run it at your own risk
+> and on your own responsibility. The live-website audit is gated behind an ownership check and
+> is passive (no payloads, no fuzzing, no login). Scanning a system you don't own or aren't
+> authorized to test may be illegal. **Full terms: [`DISCLAIMER.md`](DISCLAIMER.md).**
+>
+> **Používejte RepoGuard jen na vlastních systémech — nebo tam, kde máte písemné svolení.**
+> Software je „tak jak je", **bez záruky a bez odpovědnosti**; používáte ho na vlastní riziko.
+> Podrobně v [`DISCLAIMER.md`](DISCLAIMER.md).
+
+## Download and try it on your own site
+
+No account or server needed — the **CLI** scans a local copy of your project (code, dependencies,
+agent config, web-hardening). It runs on **your own** machine, against **your own** files.
+
+```bash
+# 1. get the scanner
+git clone https://github.com/sfrib/Exomix-parrots
+cd Exomix-parrots/repoguard
+npm install            # installs deps and builds the CLI
+
+# 2. scan your own project (a WordPress site, a web app, any folder)
+npm run cli -- scan /path/to/your/site
+#   or, after `npm link`:  repoguard scan /path/to/your/site
+
+# machine-readable output / CI:
+npm run cli -- scan /path/to/your/site --format sarif --output repoguard.sarif --fail-on high
+```
+
+To audit a **live** website you own, run the webapp (see **Local setup** below), sign in, add the
+site, prove ownership (a verification file or DNS TXT record), then run the passive audit. By
+downloading or running RepoGuard you accept [`DISCLAIMER.md`](DISCLAIMER.md).
+
 ## Architecture
 
 | Layer | Choice | Why |

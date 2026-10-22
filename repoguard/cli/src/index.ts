@@ -50,6 +50,9 @@ Examples:
   repoguard scan .
   repoguard scan ./site --format sarif --output repoguard.sarif
   repoguard scan . --offline --fail-on high
+
+Use only on systems you own or are authorized to test. Provided "as is", with
+no warranty and no liability — you run it at your own risk. See DISCLAIMER.md.
 `;
 
 interface Args {

@@ -81,6 +81,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
           );
         })}
       </ul>
+      <p className="mx-auto mt-10 max-w-xl text-xs text-slate-500">
+        {locale === "cs"
+          ? "Používejte jen na vlastních systémech nebo tam, kde máte písemné svolení. Software je „tak jak je“, bez záruky a bez odpovědnosti – používáte ho na vlastní riziko."
+          : "Use only on systems you own, or that you have written permission to test. Provided “as is”, with no warranty and no liability — you use it at your own risk."}
+      </p>
     </div>
   );
 }
