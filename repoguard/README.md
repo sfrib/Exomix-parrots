@@ -193,6 +193,10 @@ Options:
 
 Exit codes: `0` clean (or no threshold tripped), `1` findings met `--fail-on`, `2` usage/error.
 
+A **`.repoguardignore`** in the scanned folder is honoured (gitignore-style). Lines are path
+prefixes to exclude, or `rule:<id> [pathPrefix]` to baseline a specific finding; new findings
+elsewhere still surface. RepoGuard uses one to scan itself cleanly in CI.
+
 ```bash
 # produce SARIF for GitHub Code Scanning and fail CI on critical/high
 repoguard scan . --format sarif --output repoguard.sarif --fail-on high

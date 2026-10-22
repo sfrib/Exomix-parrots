@@ -39,11 +39,10 @@ Legend: ✅ done · 🚧 in progress · ⏭ planned · 💡 idea
   (DNS-rebinding IP pinning, streaming size cap, ownership re-verification, `ipaddr.js`
   private-range detection, false-positive hardening) with tests for `normalizeOrigin` and the
   hardened checks.
-- ⏭ **Self-audit** — run RepoGuard on its own repo in CI and keep the grade at A. The Action
-  and `examples/workflows/` exist, but a scanner that scans itself flags its own rule patterns
-  and i18n catalog (the literal word `eval`, regex source) as findings; enabling it as blocking
-  CI first needs a baseline/`.repoguardignore` story so those self-references don't show as real
-  alerts.
+- ✅ **Self-audit** — RepoGuard scans its own code in CI (`.github/workflows/repoguard.yml`)
+  and must stay at grade A with no critical/high. A `.repoguardignore` baseline drops the
+  scanner's unavoidable self-references (its own detection patterns and finding catalog);
+  real findings elsewhere still fail the build.
 - ⏭ **Accessibility & mobile polish** of the UI.
 
 ## Phase 2 — Distribution: CLI + GitHub Action (biggest reach)

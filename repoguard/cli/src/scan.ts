@@ -12,6 +12,7 @@ import { localizedFinding, type FindingInput } from "../../src/lib/i18n/findings
 import type { Locale } from "../../src/lib/i18n/locale";
 import type { GitHubRepo } from "../../src/lib/github";
 import { walkFolder, type WalkResult } from "./walk";
+import { isIgnored, type IgnoreRule } from "./config";
 
 /**
  * Orchestrates a local folder scan by reusing the webapp's rule engine,
@@ -52,6 +53,8 @@ export interface ScanOptions {
   /** Prepended to every reported file path (and fingerprint), so a subfolder
    * scan maps onto repo-root-relative paths for GitHub code scanning. */
   pathPrefix?: string;
+  /** Baseline: findings matching these rule ignores are dropped after detection. */
+  ignores?: IgnoreRule[];
   /** Injectable for tests. */
   fetchFn?: typeof fetch;
 }
@@ -211,13 +214,18 @@ export async function scanFolder(root: string, options: ScanOptions = {}): Promi
     for (const v of vulns) findings.push(normalizeDependency(v, locale));
   }
 
+  // Baseline: drop findings the project has chosen to ignore (matched on the
+  // pre-prefix path, so .repoguardignore entries are written against real paths).
+  const ignores = options.ignores ?? [];
+  const kept = ignores.length ? findings.filter((f) => !isIgnored(ignores, f.ruleId, f.file)) : findings;
+
   // Report paths relative to the repo root when scanning a subfolder, and
   // recompute code fingerprints so they match what a full-repo scan produces.
   const prefix = options.pathPrefix?.replace(/^\.?\/|\/$/g, "") ?? "";
   const prefixed: CliFinding[] =
     prefix === ""
-      ? findings
-      : findings.map((f) => {
+      ? kept
+      : kept.map((f) => {
           if (!f.file) return f;
           const file = `${prefix}/${f.file}`;
           const fingerprint = f.kind === "code" ? codeFingerprint({ ruleId: f.ruleId, file, snippet: f.snippet ?? f.title }) : f.fingerprint;

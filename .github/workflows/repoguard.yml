@@ -1,0 +1,47 @@
+name: RepoGuard self-audit
+
+# Runs RepoGuard on its own code and (best-effort) uploads the results to the
+# repository's Security tab. Scoped to the repoguard/ subfolder so it does not
+# interfere with the rest of the project. A .repoguardignore in repoguard/
+# baselines the scanner's unavoidable self-references (its own detection
+# patterns and finding catalog).
+
+on:
+  push:
+    branches: [main]
+    paths: ["repoguard/**", ".github/workflows/repoguard.yml"]
+  pull_request:
+    paths: ["repoguard/**", ".github/workflows/repoguard.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: RepoGuard scan
+        id: rg
+        uses: ./repoguard
+        with:
+          path: repoguard
+          fail-on: high
+          # No third-party runtime deps to look up here, and OSV.dev is exercised
+          # by the test suite, so run offline for speed and determinism.
+          offline: "true"
+          # Upload separately below so a repo without code scanning enabled
+          # (e.g. a private repo without Advanced Security) does not fail the job.
+          upload-sarif: "false"
+
+      - name: Upload SARIF to code scanning (best effort)
+        if: ${{ always() && steps.rg.outputs.sarif-file != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.rg.outputs.sarif-file }}
+          category: repoguard

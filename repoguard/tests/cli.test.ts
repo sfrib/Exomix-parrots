@@ -5,6 +5,7 @@ import path from "node:path";
 import { walkFolder } from "../cli/src/walk";
 import { scanFolder, hasFindingAtOrAbove } from "../cli/src/scan";
 import { renderJson, renderSarif, renderMarkdown, renderTable } from "../cli/src/report";
+import { parseIgnoreFile, isIgnored } from "../cli/src/config";
 
 const FIXTURES = path.resolve(import.meta.dirname, "fixtures");
 
@@ -103,6 +104,32 @@ describe("CLI dependency scan (mocked OSV)", () => {
     expect(dep!.fixedVersion).toBe("1.0.1");
     expect(dep!.severity).toBe("critical");
     expect(result.stats.checkedDeps).toBe(true);
+  });
+});
+
+describe("CLI .repoguardignore", () => {
+  it("parses path excludes and rule ignores", () => {
+    const cfg = parseIgnoreFile(["# comment", "build/", "vendor", "rule:js.dangerous.eval", "rule:secret.generic src/config", ""].join("\n"));
+    expect(cfg.excludes).toEqual(["build", "vendor"]);
+    expect(cfg.ignores).toEqual([
+      { ruleId: "js.dangerous.eval", pathPrefix: undefined },
+      { ruleId: "secret.generic", pathPrefix: "src/config" },
+    ]);
+  });
+
+  it("matches rule ignores globally and by path prefix", () => {
+    const ig = [{ ruleId: "js.dangerous.eval", pathPrefix: "lib/rules" }];
+    expect(isIgnored(ig, "js.dangerous.eval", "lib/rules/js.ts")).toBe(true);
+    expect(isIgnored(ig, "js.dangerous.eval", "app/real.ts")).toBe(false); // elsewhere still reported
+    expect(isIgnored([{ ruleId: "php.sqli" }], "php.sqli", "anywhere.php")).toBe(true);
+  });
+
+  it("drops ignored findings from a scan but keeps the rest", async () => {
+    const all = await scanFolder(FIXTURES, { offline: true });
+    const filtered = await scanFolder(FIXTURES, { offline: true, ignores: [{ ruleId: "php.sqli" }] });
+    expect(all.findings.some((f) => f.ruleId === "php.sqli")).toBe(true);
+    expect(filtered.findings.some((f) => f.ruleId === "php.sqli")).toBe(false);
+    expect(filtered.findings.length).toBeLessThan(all.findings.length);
   });
 });
 

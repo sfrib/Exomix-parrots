@@ -6,6 +6,7 @@ import { isLocale, type Locale } from "../../src/lib/i18n/locale";
 import { SEVERITIES, isSeverity, type Severity } from "../../src/lib/severity";
 import { scanFolder, hasFindingAtOrAbove } from "./scan";
 import { renderTable, renderJson, renderSarif, renderMarkdown } from "./report";
+import { loadConfig } from "./config";
 
 /**
  * `repoguard scan <path>` — a login-free, server-free local scan that reuses
@@ -50,6 +51,9 @@ Examples:
   repoguard scan .
   repoguard scan ./site --format sarif --output repoguard.sarif
   repoguard scan . --offline --fail-on high
+
+A .repoguardignore file in the scanned folder is honoured (path excludes and
+"rule:<id> [pathPrefix]" baselines).
 
 Use only on systems you own or are authorized to test. Provided "as is", with
 no warranty and no liability — you run it at your own risk. See DISCLAIMER.md.
@@ -140,7 +144,14 @@ async function main() {
   const args = parseArgs(argv);
   const root = path.resolve(args.path);
 
-  const result = await scanFolder(root, { locale: args.lang, offline: args.offline, excludes: args.excludes, pathPrefix: args.pathPrefix });
+  const config = await loadConfig(root);
+  const result = await scanFolder(root, {
+    locale: args.lang,
+    offline: args.offline,
+    excludes: [...config.excludes, ...args.excludes],
+    ignores: config.ignores,
+    pathPrefix: args.pathPrefix,
+  });
 
   let rendered: string;
   switch (args.format) {
