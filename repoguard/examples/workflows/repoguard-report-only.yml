@@ -1,0 +1,25 @@
+# Example: report-only mode. RepoGuard never fails the build; findings are
+# uploaded to the Security tab and shown in the step summary. Good for trying
+# the tool out on an existing repository before turning on enforcement.
+#
+# Copy this file to .github/workflows/repoguard.yml in your repository.
+
+name: RepoGuard (report only)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sfrib/Exomix-parrots/repoguard@main
+        with:
+          fail-on: none
+          exclude: "tests/fixtures"

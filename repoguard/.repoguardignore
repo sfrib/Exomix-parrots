@@ -1,0 +1,25 @@
+# RepoGuard scanning its OWN source: baseline the unavoidable self-references.
+# A security scanner must contain the very patterns it looks for (the literal
+# word "eval", example secrets, regex sources) and an English finding catalog
+# that quotes them. Those are not vulnerabilities in this codebase, so they are
+# ignored here. Real findings anywhere else still surface.
+#
+# Syntax: "path/prefix" excludes a path; "rule:<id> [pathPrefix]" drops a rule
+# (optionally only under a path). See cli/src/config.ts.
+
+# Test code: intentionally-vulnerable fixtures and example payloads in test inputs.
+tests
+
+# Build output (compiled copies of the rule sources) and gitignored dev config.
+cli/dist
+.env
+
+# Detection patterns live in the rule definitions and the i18n catalog.
+rule:js.dangerous.eval src/lib/scanner/rules
+rule:js.dangerous.eval src/lib/i18n/findings.ts
+rule:secret.generic src/lib/scanner/rules/secrets.ts
+rule:js.crypto.weak-random src/lib/scanner/rules/js.ts
+rule:js.crypto.weak-random src/lib/i18n/findings.ts
+rule:js.tls.verify-disabled src/lib/scanner/rules/js.ts
+rule:js.tls.verify-disabled src/lib/i18n/findings.ts
+rule:js.xss.html-sink src/lib/scanner/rules/js.ts
