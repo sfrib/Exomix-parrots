@@ -258,6 +258,44 @@ function certFindings(host: string, cert: CertInfo | null, locale: Locale): Site
       fix: pick({ en: "Use a certificate from a trusted CA (Let's Encrypt is free and automatic).", cs: "Použijte certifikát od důvěryhodné CA (Let's Encrypt je zdarma a automatický)." }, locale),
     });
   }
+  if (cert.protocol && /^(TLSv1(\.0)?|TLSv1\.1|SSLv3|SSLv2)$/.test(cert.protocol)) {
+    out.push({
+      id: "site.tls.old-protocol",
+      severity: "medium",
+      title: pick({ en: `Outdated TLS protocol (${cert.protocol})`, cs: `Zastaralý TLS protokol (${cert.protocol})` }, locale),
+      explanation: pick(
+        { en: "The server negotiated an old TLS version (1.1 or older) that has known weaknesses and is deprecated by browsers.", cs: "Server se dohodl na staré verzi TLS (1.1 nebo starší), která má známé slabiny a prohlížeče ji už odmítají." },
+        locale,
+      ),
+      fix: pick({ en: "Enable only TLS 1.2 and 1.3 on the server and disable TLS 1.0/1.1.", cs: "Na serveru povolte jen TLS 1.2 a 1.3 a vypněte TLS 1.0/1.1." }, locale),
+      evidence: cert.protocol,
+    });
+  }
+  if (cert.cipher && /\bRC4\b|3DES|DES-CBC|NULL|EXPORT|MD5|_CBC_SHA$|-SHA$/i.test(cert.cipher)) {
+    out.push({
+      id: "site.tls.weak-cipher",
+      severity: "medium",
+      title: pick({ en: "Weak TLS cipher suite", cs: "Slabá TLS šifra" }, locale),
+      explanation: pick(
+        { en: "The connection uses a cipher (RC4, 3DES, CBC-SHA, export or MD5-based) with known weaknesses, so the encryption is not strong.", cs: "Spojení používá šifru (RC4, 3DES, CBC-SHA, export nebo MD5) se známými slabinami, takže šifrování není silné." },
+        locale,
+      ),
+      fix: pick({ en: "Configure the server to prefer modern AEAD ciphers (AES-GCM, ChaCha20-Poly1305) and drop legacy ones.", cs: "Nastavte server tak, aby preferoval moderní AEAD šifry (AES-GCM, ChaCha20-Poly1305) a odstranil staré." }, locale),
+      evidence: cert.cipher,
+    });
+  } else if (cert.cipher && cert.protocol !== "TLSv1.3" && !/^ECDHE|^DHE|_AES_\d+_GCM/i.test(cert.cipher)) {
+    out.push({
+      id: "site.tls.no-pfs",
+      severity: "low",
+      title: pick({ en: "No forward secrecy in the TLS cipher", cs: "Šifra TLS nemá dopřednou utajenost" }, locale),
+      explanation: pick(
+        { en: "The cipher does not use ephemeral key exchange (ECDHE/DHE), so if the server key leaks later, past recorded traffic could be decrypted.", cs: "Šifra nepoužívá dočasnou výměnu klíčů (ECDHE/DHE), takže při pozdějším úniku klíče serveru by šel dešifrovat dříve zaznamenaný provoz." },
+        locale,
+      ),
+      fix: pick({ en: "Prefer ECDHE cipher suites (forward secrecy).", cs: "Preferujte šifry ECDHE (dopředná utajenost)." }, locale),
+      evidence: cert.cipher,
+    });
+  }
   if (!cert.hostnameMatches && cert.subjectCN) {
     out.push({
       id: "site.tls.hostname",

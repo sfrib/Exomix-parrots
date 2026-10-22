@@ -106,6 +106,8 @@ describe("auditSite — deeper checks", () => {
       altNames: ["demo.example"],
       selfSigned: false,
       hostnameMatches: true,
+      protocol: "TLSv1.3",
+      cipher: "TLS_AES_128_GCM_SHA256",
       ...over,
     });
   }
@@ -139,6 +141,15 @@ describe("auditSite — deeper checks", () => {
     expect(ids).toContain("site.mixed-content");
     expect(ids).toContain("site.dir-listing");
     expect(ids).toContain("site.no-security-txt");
+  });
+
+  it("flags an outdated TLS protocol and a weak cipher", async () => {
+    const old = await auditSite("https://demo.example", okFetcher, "en", cert({ protocol: "TLSv1.1", cipher: "ECDHE-RSA-AES128-GCM-SHA256" }));
+    expect(old.findings.map((f) => f.id)).toContain("site.tls.old-protocol");
+    const weak = await auditSite("https://demo.example", okFetcher, "en", cert({ cipher: "ECDHE-RSA-RC4-SHA" }));
+    expect(weak.findings.map((f) => f.id)).toContain("site.tls.weak-cipher");
+    const noPfs = await auditSite("https://demo.example", okFetcher, "en", cert({ protocol: "TLSv1.2", cipher: "AES256-SHA256" }));
+    expect(noPfs.findings.map((f) => f.id)).toContain("site.tls.no-pfs");
   });
 
   it("a fully clean site with a good cert has no findings", async () => {

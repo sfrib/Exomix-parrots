@@ -115,6 +115,10 @@ export interface CertInfo {
   altNames: string[];
   selfSigned: boolean;
   hostnameMatches: boolean;
+  /** Negotiated TLS protocol, e.g. "TLSv1.3" / "TLSv1.1". */
+  protocol: string | null;
+  /** Negotiated cipher suite name, e.g. "TLS_AES_128_GCM_SHA256" or "ECDHE-RSA-AES128-GCM-SHA256". */
+  cipher: string | null;
 }
 
 export type CertProvider = (host: string) => Promise<CertInfo | null>;
@@ -126,6 +130,8 @@ export const liveCert: CertProvider = async (host) => {
     const socket = tls.connect({ host, port: 443, servername: host, timeout: DEFAULT_TIMEOUT_MS, rejectUnauthorized: false }, () => {
       const cert = socket.getPeerCertificate();
       const authorized = socket.authorized;
+      const protocol = socket.getProtocol();
+      const cipherInfo = socket.getCipher();
       socket.end();
       if (!cert || !cert.valid_to) return resolve(null);
       const validTo = new Date(cert.valid_to);
@@ -147,6 +153,8 @@ export const liveCert: CertProvider = async (host) => {
         altNames,
         selfSigned: Boolean(issuerCN && subjectCN && issuerCN === subjectCN) || !authorized,
         hostnameMatches: [subjectCN, ...altNames].some(matchOne),
+        protocol,
+        cipher: cipherInfo?.standardName ?? cipherInfo?.name ?? null,
       });
     });
     socket.on("error", () => resolve(null));
