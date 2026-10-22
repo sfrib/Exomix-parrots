@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeOrigin, SiteFetchError, type SiteFetch, type SiteResponse } from "@/lib/site/fetch";
+import { normalizeOrigin, isPrivateAddr, SiteFetchError, type SiteFetch, type SiteResponse } from "@/lib/site/fetch";
 import { auditSite, scoreSite } from "@/lib/site/audit";
 import type { CertInfo, CertProvider } from "@/lib/site/fetch";
 
@@ -14,9 +14,25 @@ describe("normalizeOrigin (SSRF guard)", () => {
     expect(normalizeOrigin("example.com")).toEqual({ origin: "https://example.com", host: "example.com" });
     expect(normalizeOrigin("http://app.exomix.cz/path")).toEqual({ origin: "http://app.exomix.cz", host: "app.exomix.cz" });
   });
-  it("rejects localhost, IPs, internal and non-http schemes", () => {
-    for (const bad of ["localhost", "127.0.0.1", "http://127.0.0.1", "192.168.0.1", "ftp://example.com", "http://box.local", "notadomain"]) {
+  it("rejects localhost, IPs, internal, shorthand/bracketed IPs and non-http schemes", () => {
+    for (const bad of [
+      "localhost", "127.0.0.1", "http://127.0.0.1", "192.168.0.1", "ftp://example.com", "http://box.local", "notadomain",
+      "http://[::1]", "http://[::ffff:127.0.0.1]", "127.1", "0x7f.0.0.1", "0177.0.0.1", "2130706433", "169.254.169.254", "metadata.internal", "http://user:pass@127.0.0.1",
+    ]) {
       expect(() => normalizeOrigin(bad), bad).toThrow(SiteFetchError);
+    }
+  });
+});
+
+describe("isPrivateAddr", () => {
+  it("blocks private, loopback, link-local, CGNAT, reserved and IPv4-mapped IPv6", () => {
+    for (const ip of ["127.0.0.1", "10.0.0.1", "192.168.1.1", "172.16.0.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fe80::1", "fc00::1", "fd00::1", "::ffff:192.168.0.1", "::ffff:127.0.0.1", "::ffff:7f00:1", "garbage"]) {
+      expect(isPrivateAddr(ip), ip).toBe(true);
+    }
+  });
+  it("allows normal public addresses", () => {
+    for (const ip of ["1.1.1.1", "8.8.8.8", "93.184.216.34", "2606:4700:4700::1111"]) {
+      expect(isPrivateAddr(ip), ip).toBe(false);
     }
   });
 });
@@ -94,6 +110,40 @@ describe("auditSite", () => {
   });
 });
 
+
+describe("audit checks — false-positive hardening (from adversarial review)", () => {
+  function f(map: Record<string, SiteResponse>): SiteFetch {
+    return async (url) => {
+      const key = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+      return map[key] ?? resp({ status: 404 });
+    };
+  }
+  const baseHeaders = { "content-security-policy": "x", "strict-transport-security": "max-age=99999999", "x-content-type-options": "n", "x-frame-options": "x", "referrer-policy": "x" };
+
+  it("does not flag plain <a href=http://> as mixed content, but does flag an http stylesheet", async () => {
+    const aOnly = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders, body: '<a href="http://other.example/page">link</a>' }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(aOnly.findings.map((x) => x.id)).not.toContain("site.mixed-content");
+    const css = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders, body: '<link rel="stylesheet" href="http://cdn.example/a.css">' }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(css.findings.map((x) => x.id)).toContain("site.mixed-content");
+  });
+
+  it("does not flag /backup.zip from a page that merely contains the letters PK", async () => {
+    const found = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders }), "/backup.zip": resp({ status: 200, body: "This page mentions PK raftimasr... not a zip" }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(found.findings.map((x) => x.id)).not.toContain("site.exposed.backup");
+  });
+
+  it("does not flag .svn/entries from a soft-404 JSON page", async () => {
+    const found = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders }), "/.svn/entries": resp({ status: 200, body: '{"error":"not found"}' }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(found.findings.map((x) => x.id)).not.toContain("site.exposed.svn");
+  });
+
+  it("only flags session-like cookies and checks SameSite", async () => {
+    const consent = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders, cookies: ["cookie_consent=1; Path=/"] }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(consent.findings.map((x) => x.id)).not.toContain("site.cookie.flags");
+    const sess = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders, cookies: ["PHPSESSID=abc; Secure; HttpOnly"] }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(sess.findings.map((x) => x.id)).toContain("site.cookie.flags"); // missing SameSite
+  });
+});
 
 describe("auditSite — deeper checks", () => {
   function cert(over: Partial<CertInfo>): CertProvider {

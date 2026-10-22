@@ -97,13 +97,13 @@ const SENSITIVE_PATHS: { path: string; id: string; severity: Severity; title: L;
   { path: "/.git/HEAD", id: "site.exposed.git", severity: "high", title: { en: "Exposed .git repository", cs: "Vystavený .git repozitář" }, mustContain: /^ref:|^[0-9a-f]{40}/m },
   { path: "/.env", id: "site.exposed.env", severity: "critical", title: { en: "Exposed .env file", cs: "Vystavený soubor .env" }, mustContain: /[A-Z0-9_]+=/ },
   { path: "/wp-config.php.bak", id: "site.exposed.wpconfig", severity: "critical", title: { en: "Exposed wp-config backup", cs: "Vystavená záloha wp-config" }, mustContain: /DB_|define\s*\(/ },
-  { path: "/.svn/entries", id: "site.exposed.svn", severity: "high", title: { en: "Exposed .svn directory", cs: "Vystavený adresář .svn" } },
+  { path: "/.svn/entries", id: "site.exposed.svn", severity: "high", title: { en: "Exposed .svn directory", cs: "Vystavený adresář .svn" }, mustContain: /^\d+\s*$|\bdir\b|svn:|^K \d+/m },
   { path: "/server-status", id: "site.exposed.serverstatus", severity: "medium", title: { en: "Apache server-status exposed", cs: "Vystavený Apache server-status" }, mustContain: /Apache Server Status|Server uptime/i },
   { path: "/phpinfo.php", id: "site.exposed.phpinfo", severity: "medium", title: { en: "phpinfo() page exposed", cs: "Vystavená stránka phpinfo()" }, mustContain: /phpinfo\(\)|PHP Version/i },
   { path: "/.git/config", id: "site.exposed.gitconfig", severity: "high", title: { en: "Exposed .git/config", cs: "Vystavený .git/config" }, mustContain: /\[core\]|\[remote/ },
   { path: "/.env.local", id: "site.exposed.envlocal", severity: "critical", title: { en: "Exposed .env.local file", cs: "Vystavený soubor .env.local" }, mustContain: /[A-Z0-9_]+=/ },
   { path: "/adminer.php", id: "site.exposed.adminer", severity: "high", title: { en: "Adminer database tool exposed", cs: "Vystavený nástroj Adminer" }, mustContain: /Adminer|Login - Adminer/i },
-  { path: "/backup.zip", id: "site.exposed.backup", severity: "high", title: { en: "Exposed backup archive", cs: "Vystavený zálohový archiv" }, mustContain: /PK\x03\x04|PK/ },
+  { path: "/backup.zip", id: "site.exposed.backup", severity: "high", title: { en: "Exposed backup archive", cs: "Vystavený zálohový archiv" }, mustContain: /^PK\x03\x04/ },
 ];
 
 const EXPOSED_FIX: L = {
@@ -113,8 +113,10 @@ const EXPOSED_FIX: L = {
 
 function cookieFindings(home: SiteResponse, locale: Locale): SiteFinding[] {
   // Headers.getSetCookie() returns all Set-Cookie lines.
-  const cookies = typeof home.headers.getSetCookie === "function" ? home.headers.getSetCookie() : home.headers.get("set-cookie") ? [home.headers.get("set-cookie")!] : [];
-  const bad = cookies.filter((c) => !/;\s*secure/i.test(c) || !/;\s*httponly/i.test(c));
+  const cookies = typeof home.headers.getSetCookie === "function" ? home.headers.getSetCookie() : [];
+  // Only session-like cookies matter for hijacking; consent/analytics cookies are intentionally readable.
+  const sessionLike = cookies.filter((c) => /^(?:[^=]*?)(sess|sid|token|auth|login|logged_in|csrf|xsrf|remember|wordpress_)/i.test(c.trim()));
+  const bad = sessionLike.filter((c) => !/;\s*secure/i.test(c) || !/;\s*httponly/i.test(c) || !/;\s*samesite/i.test(c));
   if (bad.length === 0) return [];
   const name = bad[0].split("=")[0];
   return [
@@ -124,8 +126,8 @@ function cookieFindings(home: SiteResponse, locale: Locale): SiteFinding[] {
       title: pick({ en: "Cookies without Secure / HttpOnly flags", cs: "Cookies bez příznaků Secure / HttpOnly" }, locale),
       explanation: pick(
         {
-          en: "A session cookie without HttpOnly can be stolen by JavaScript (XSS); without Secure it can travel over unencrypted HTTP. Both make session hijacking easier.",
-          cs: "Session cookie bez HttpOnly může ukrást JavaScript (XSS); bez Secure může cestovat přes nešifrované HTTP. Obojí usnadňuje převzetí relace.",
+          en: "A session cookie without HttpOnly can be stolen by JavaScript (XSS); without Secure it can travel over unencrypted HTTP; without SameSite it is sent on cross-site requests (CSRF). Each makes session hijacking easier.",
+          cs: "Session cookie bez HttpOnly může ukrást JavaScript (XSS); bez Secure může cestovat přes nešifrované HTTP; bez SameSite se posílá i při požadavcích z cizích webů (CSRF). Vše usnadňuje převzetí relace.",
         },
         locale,
       ),
@@ -209,8 +211,10 @@ function headerQualityFindings(home: SiteResponse, locale: Locale): SiteFinding[
 
 function mixedContentFindings(origin: string, home: SiteResponse, locale: Locale): SiteFinding[] {
   if (!origin.startsWith("https:")) return [];
-  const matches = [...home.body.matchAll(/\b(?:src|href)\s*=\s*["'](http:\/\/[^"']+)/gi)].map((m) => m[1]);
-  const external = matches.filter((u) => !/\.(css)(\?|$)/i.test(u)); // keep it simple; any http resource counts
+  // Only resource-loading contexts are mixed content; a plain <a href="http://"> navigation link is not.
+  const scriptImg = [...home.body.matchAll(/<(?:script|img|iframe|audio|video|source|embed|object)\b[^>]*\b(?:src|data)\s*=\s*["'](http:\/\/[^"']+)/gi)].map((m) => m[1]);
+  const linkHref = [...home.body.matchAll(/<link\b[^>]*\bhref\s*=\s*["'](http:\/\/[^"']+)/gi)].map((m) => m[1]);
+  const external = [...scriptImg, ...linkHref];
   if (external.length === 0) return [];
   return [
     {
