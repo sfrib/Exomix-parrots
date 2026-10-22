@@ -26,26 +26,37 @@ Legend: ✅ done · 🚧 in progress · ⏭ planned · 💡 idea
   annotation patch (PR), SARIF.
 - ✅ **Optional AI** — per-finding review + attack-scenario analysis (defensive only).
 - ✅ **Bilingual** (English default + Czech), locale-aware exports.
+- ✅ **CLI** — `repoguard scan <folder>`, no login/server; table / JSON / SARIF / Markdown,
+  `--fail-on` for CI. Shares the webapp's engine, parsers, scoring and SARIF builder.
+- ✅ **GitHub Action** — composite action that scans and uploads SARIF to Code Scanning.
 
-## Phase 1 — Harden what exists (next)
+## Phase 1 — Harden what exists
 
-- 🚧 **Deeper TLS** — protocol (TLS 1.0/1.1) and weak-cipher / no-forward-secrecy detection
+- ✅ **Deeper TLS** — protocol (TLS 1.0/1.1) and weak-cipher / no-forward-secrecy detection
   (done via Node `tls`, no extra dependency). ⏭ optionally probe which legacy versions the
   server still accepts (bounded extra handshakes).
-- ⏭ **Self-audit** — run RepoGuard on its own repo in CI and keep the grade at A.
-- ⏭ **Robustness pass** — act on the adversarial review of the SSRF guard and audit checks;
-  add fuzz-style tests for `normalizeOrigin`.
+- ✅ **Robustness pass** — acted on the adversarial review of the SSRF guard and audit checks
+  (DNS-rebinding IP pinning, streaming size cap, ownership re-verification, `ipaddr.js`
+  private-range detection, false-positive hardening) with tests for `normalizeOrigin` and the
+  hardened checks.
+- ⏭ **Self-audit** — run RepoGuard on its own repo in CI and keep the grade at A. The Action
+  and `examples/workflows/` exist, but a scanner that scans itself flags its own rule patterns
+  and i18n catalog (the literal word `eval`, regex source) as findings; enabling it as blocking
+  CI first needs a baseline/`.repoguardignore` story so those self-references don't show as real
+  alerts.
 - ⏭ **Accessibility & mobile polish** of the UI.
 
 ## Phase 2 — Distribution: CLI + GitHub Action (biggest reach)
 
-- ⏭ **`npx repoguard scan`** — run the code / dependency / agent-config / web-hardening scan
-  locally on a folder, no login or server. Output: terminal table, JSON, **SARIF**.
-- ⏭ **GitHub Action** — `repoguard/scan-action` that runs the CLI and uploads SARIF to GitHub
-  Code Scanning, so findings show in the repo's Security tab. Fails the build on new
-  critical/high (configurable).
-- ⏭ **Shared core** — extract the rule engine / parsers / scoring into a package both the
-  webapp and the CLI import (no logic duplication).
+- ✅ **`repoguard scan`** — runs the code / dependency / agent-config / web-hardening scan
+  locally on a folder, no login or server. Output: terminal table, JSON, **SARIF**, Markdown;
+  `--fail-on`, `--offline`, `--lang`, `--exclude`, `--path-prefix`. (`cli/`)
+- ✅ **GitHub Action** — composite `action.yml` that runs the CLI and uploads SARIF to GitHub
+  Code Scanning, so findings show in the repo's Security tab. Fails the build on
+  critical/high (configurable via `fail-on`). Ready-made workflows in `examples/workflows/`.
+- ✅ **Shared core** — the rule engine, dependency parsers/OSV, posture checks, scoring, SARIF
+  builder and fingerprints live in `src/lib/` and are imported by **both** the webapp and the
+  CLI (no logic duplication). The CLI build pulls in only the pure modules, not the DB/UI layer.
 
 ## Phase 3 — Monitoring & teams
 

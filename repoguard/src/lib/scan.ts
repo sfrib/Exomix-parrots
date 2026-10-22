@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { db } from "./db";
+import { codeFingerprint, depFingerprint, sha1 } from "./fingerprint";
 import { tokenFor } from "./session";
 import {
   downloadRepoFiles,
@@ -15,8 +15,9 @@ import { checkPosture } from "./posture";
 import { checkExposedFiles } from "./scanner/rules/hardening";
 import { checkComponents, isComponentFile } from "./scanner/rules/components";
 import type { SourceFile } from "./scanner/types";
-import { isManifest, parseManifests, type Ecosystem, type ParsedDependency } from "./deps/parsers";
+import { isManifest, parseManifests, type ParsedDependency } from "./deps/parsers";
 import { checkDependencies, type AdvisoryCache, type DependencyVulnerability, type OsvVulnerability } from "./deps/osv";
+import { describeDependencyRisk } from "./deps/describe";
 
 export type ScanKind = "code" | "deps" | "all";
 export type ScanTrigger = "manual" | "cron";
@@ -35,53 +36,6 @@ const advisoryCache: AdvisoryCache = {
     await db.advisory.upsert({ where: { id }, create: { id, json }, update: { json, fetchedAt: new Date() } });
   },
 };
-
-function sha1(text: string): string {
-  return createHash("sha1").update(text).digest("hex");
-}
-
-function upgradeCommand(ecosystem: Ecosystem, name: string, version: string): string {
-  switch (ecosystem) {
-    case "Packagist":
-      return `composer require ${name}:^${version}`;
-    case "npm":
-      return `npm install ${name}@^${version}`;
-    case "PyPI":
-      return `pip install "${name}>=${version}"`;
-  }
-}
-
-function describeDependencyRisk(v: DependencyVulnerability) {
-  const d = v.dependency;
-  const ids = [v.advisoryId, ...v.aliases.filter((a) => a !== v.advisoryId)].join(", ");
-  const parts = [
-    `Balíček ${d.name} ve verzi ${d.version} obsahuje veřejně známou zranitelnost (${ids}).`,
-    `Popis z databáze OSV: „${v.summary}“.`,
-    "Informace o známých zranitelnostech jsou veřejné, takže je útočníci aktivně vyhledávají na webech, které používají zranitelné verze.",
-  ];
-  if (!d.direct) parts.push("Jde o nepřímou závislost – nainstalovala ji jiná knihovna, kterou používáte.");
-  if (d.approximate) parts.push(`Verze je odvozena z rozsahu v ${d.manifest} (chybí lockfile); skutečně nainstalovaná verze může být novější.`);
-  const explanation = parts.join(" ");
-
-  let fix: string;
-  if (v.fixedVersion) {
-    fix = d.direct
-      ? `Aktualizujte ${d.name} alespoň na verzi ${v.fixedVersion}: ${upgradeCommand(d.ecosystem, d.name, v.fixedVersion)}. Po aktualizaci aplikaci otestujte a commitněte i aktualizovaný lockfile.`
-      : `Aktualizujte balíček, který ${d.name} vyžaduje, případně vynuťte opravenou verzi ${v.fixedVersion} (npm: \"overrides\" v package.json, Composer: composer update ${d.name} --with-dependencies). Poté commitněte lockfile.`;
-  } else {
-    fix = "Opravená verze zatím není k dispozici. Prostudujte doporučení v advisory (odkaz níže), zvažte náhradu balíčku nebo omezte použití zranitelné funkce.";
-  }
-  return { explanation, fix };
-}
-
-function codeFingerprint(f: { ruleId: string; file: string; snippet: string }): string {
-  return sha1(`${f.ruleId}|${f.file}|${f.snippet.replace(/\s+/g, " ")}`);
-}
-
-function depFingerprint(v: DependencyVulnerability): string {
-  const d = v.dependency;
-  return sha1(`${d.ecosystem}|${d.name}|${d.version}|${v.advisoryId}`);
-}
 
 interface CarriedState {
   firstSeenAt: Date;

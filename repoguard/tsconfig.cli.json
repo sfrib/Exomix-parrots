@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "outDir": "cli/dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "declaration": false,
+    "sourceMap": false,
+    "incremental": false,
+    "composite": false,
+    "plugins": []
+  },
+  "include": ["cli/src/**/*.ts"],
+  "exclude": ["node_modules", "cli/dist", "src/generated"]
+}

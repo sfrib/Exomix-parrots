@@ -129,6 +129,63 @@ Requirements: Node.js 20+.
 
 On Vercel, add a cron job in `vercel.json` (`{"crons":[{"path":"/api/cron","schedule":"15 6 * * *"}]}`); Vercel sends the bearer header automatically. Note that SQLite does not persist on Vercel, so use Postgres there: set `provider = "postgresql"` in `prisma/schema.prisma` and replace the adapter in `src/lib/db.ts` with `@prisma/adapter-pg`.
 
+## CLI
+
+The same scanner runs on a local folder with no login and no server — useful in CI or on a machine with no browser. The CLI imports the **same** rule engine, dependency checks, posture checks and scoring as the webapp (shared code in `src/lib/`, wired together in `cli/`), so results match.
+
+```bash
+npm install          # builds the CLI (prepare → build:cli)
+npm run build:cli    # or build it explicitly → cli/dist/
+
+# scan the current folder (table output)
+node cli/dist/cli/src/index.js scan .
+
+# or, once installed as a bin:
+repoguard scan ./my-site
+```
+
+Options:
+
+| Option | Meaning |
+| --- | --- |
+| `-f, --format table\|json\|sarif\|markdown` | Output format (default `table`). |
+| `-o, --output <file>` | Write the report to a file instead of stdout. |
+| `--offline` | Skip the OSV.dev dependency lookup (no network). |
+| `--lang en\|cs` | Report language (default `en`). |
+| `-e, --exclude <path>` | Skip a path prefix (repeatable). |
+| `--path-prefix <p>` | Prefix reported paths (repo-root-relative SARIF when scanning a subfolder). |
+| `--fail-on critical\|high\|medium\|low\|none` | Exit `1` if any finding is at/above this severity (default `none`). |
+
+Exit codes: `0` clean (or no threshold tripped), `1` findings met `--fail-on`, `2` usage/error.
+
+```bash
+# produce SARIF for GitHub Code Scanning and fail CI on critical/high
+repoguard scan . --format sarif --output repoguard.sarif --fail-on high
+```
+
+## GitHub Action
+
+`action.yml` is a composite action that builds the CLI from its own checkout, scans your repository, uploads the results to the **Security → Code scanning** tab (SARIF), and optionally fails the build. Copy one of the ready-made workflows in [`examples/workflows/`](examples/workflows/) to `.github/workflows/`:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write # required to upload SARIF
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sfrib/Exomix-parrots/repoguard@main
+        with:
+          path: "."
+          fail-on: high
+          exclude: "tests/fixtures" # skip intentionally-vulnerable test data
+```
+
+Inputs: `path` (default `.`), `fail-on` (default `high`), `lang` (`en`/`cs`), `exclude`, `offline`, `upload-sarif` (default `true`), `node-version` (default `20`).
+
 ## What is scanned
 
 **Code (PHP, JS/TS, config files)**. Each finding has a severity, CWE, file and line, a plain-language Czech explanation, and a concrete fix.

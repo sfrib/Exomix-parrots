@@ -1,5 +1,26 @@
-import type { Finding } from "@/generated/prisma/client";
 import type { Locale } from "./locale";
+
+/**
+ * The finding fields this module reads. A structural subset of the Prisma
+ * `Finding` row (which is assignable to it), so the English catalog can be
+ * reused outside the database layer — e.g. by the CLI — without depending on
+ * the generated Prisma client.
+ */
+export interface FindingInput {
+  kind: string;
+  ruleId: string;
+  severity: string;
+  title: string;
+  explanation: string;
+  fix: string;
+  file?: string | null;
+  installedVersion?: string | null;
+  fixedVersion?: string | null;
+  ecosystem?: string | null;
+  packageName?: string | null;
+  advisoryId?: string | null;
+  aliases?: string | null;
+}
 
 /**
  * English text for every finding. Czech stays as the text stored on each finding
@@ -434,7 +455,7 @@ export const RULE_EN: Record<string, RuleText> = {
 };
 
 /** Dependency finding text, computed from the stored structured fields. */
-function depTextEn(f: Finding): FindingText {
+function depTextEn(f: FindingInput): FindingText {
   const ids = [f.advisoryId, ...(f.aliases?.split(", ").filter((a) => a && a !== f.advisoryId) ?? [])].filter(Boolean).join(", ");
   const parts = [
     `Package ${f.packageName} version ${f.installedVersion} has a publicly known vulnerability (${ids}).`,
@@ -452,7 +473,7 @@ function depTextEn(f: Finding): FindingText {
   return { title: f.title, explanation: parts.filter(Boolean).join(" "), fix };
 }
 
-function compTextEn(f: Finding): FindingText | null {
+function compTextEn(f: FindingInput): FindingText | null {
   if (f.ruleId === "comp.wp-core") {
     const v = f.installedVersion ?? "?";
     const old = f.severity === "high";
@@ -487,7 +508,7 @@ const REPO_EN: Record<string, RuleText> = {
 };
 
 /** Returns title/explanation/fix for a finding in the given locale. */
-export function localizedFinding(f: Finding, locale: Locale): FindingText {
+export function localizedFinding(f: FindingInput, locale: Locale): FindingText {
   if (locale === "cs") return { title: f.title, explanation: f.explanation, fix: f.fix };
   if (f.kind === "dependency") return depTextEn(f);
   const comp = f.ruleId.startsWith("comp.") ? compTextEn(f) : null;

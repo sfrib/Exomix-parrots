@@ -1,76 +1,49 @@
 import type { Finding, Repo, Suppression } from "@/generated/prisma/client";
 import { computeScore, categoryOf } from "./score";
 import { partitionSuppressed, sortFindings, SUPPRESSION_LABEL_CS } from "./findings";
-import { isSeverity, type Severity } from "./severity";
+import { isSeverity } from "./severity";
 import { localizedFinding } from "./i18n/findings";
 import { t } from "./i18n/messages";
 import type { Locale } from "./i18n/locale";
 import { canonicalReport, signReport } from "./sign";
+import { buildSarif, type SarifFinding } from "./sarif";
 
 /** Report exports: SARIF 2.1.0 (GitHub code scanning), JSON and Markdown. */
 
-const SARIF_LEVEL: Record<Severity, "error" | "warning" | "note"> = {
-  critical: "error",
-  high: "error",
-  medium: "warning",
-  low: "note",
-};
-
-// GitHub maps "security-severity" (0–10) to its own severity labels.
-const SECURITY_SEVERITY: Record<Severity, string> = { critical: "9.5", high: "8.0", medium: "5.5", low: "2.0" };
+const INFORMATION_URI = "https://github.com/sfrib/Exomix-parrots/tree/main/repoguard";
 
 type RepoWithFindings = Repo & { findings: Finding[]; suppressions: Suppression[] };
 
 export function toSarif(repo: RepoWithFindings, version: string, locale: Locale = "en") {
   const suppressedBy = new Map(repo.suppressions.map((s) => [s.fingerprint, s]));
   // Repository settings findings have no code location, so they are not part of SARIF.
-  const findings = sortFindings(repo.findings).filter((f) => f.file);
-  const ruleIds = [...new Set(findings.map((f) => f.ruleId))];
-  const rules = ruleIds.map((id) => {
-    const f = findings.find((x) => x.ruleId === id)!;
-    const sev = isSeverity(f.severity) ? f.severity : "medium";
-    const lf = localizedFinding(f, locale);
-    return {
-      id,
-      name: id,
-      shortDescription: { text: lf.title },
-      fullDescription: { text: lf.explanation },
-      help: { text: lf.fix },
-      properties: {
-        tags: ["security", ...(f.cwe ? [`external/cwe/${f.cwe.toLowerCase()}`] : []), categoryOf(f)],
-        "security-severity": SECURITY_SEVERITY[sev],
-      },
-    };
+  const sarifFindings: SarifFinding[] = sortFindings(repo.findings)
+    .filter((f) => f.file)
+    .map((f) => {
+      const lf = localizedFinding(f, locale);
+      const suppression = suppressedBy.get(f.fingerprint);
+      return {
+        ruleId: f.ruleId,
+        title: lf.title,
+        explanation: lf.explanation,
+        fix: lf.fix,
+        severity: isSeverity(f.severity) ? f.severity : "medium",
+        cwe: f.cwe,
+        category: categoryOf(f),
+        file: f.file!,
+        line: f.line ?? 1,
+        fingerprint: f.fingerprint,
+        suppression: suppression
+          ? { justification: `${SUPPRESSION_LABEL_CS[suppression.status] ?? suppression.status}: ${suppression.note}` }
+          : null,
+      };
+    });
+  return buildSarif(sarifFindings, {
+    toolName: "RepoGuard",
+    version,
+    informationUri: INFORMATION_URI,
+    provenance: repo.lastCommitSha ? [{ repositoryUri: repo.htmlUrl, revisionId: repo.lastCommitSha, branch: repo.defaultBranch }] : undefined,
   });
-  const results = findings.map((f) => {
-    const sev = isSeverity(f.severity) ? f.severity : "medium";
-    const suppression = suppressedBy.get(f.fingerprint);
-    const lf = localizedFinding(f, locale);
-    return {
-      ruleId: f.ruleId,
-      ruleIndex: ruleIds.indexOf(f.ruleId),
-      level: SARIF_LEVEL[sev],
-      message: { text: `${lf.title}. ${lf.explanation} Fix: ${lf.fix}` },
-      locations: [{ physicalLocation: { artifactLocation: { uri: f.file! }, region: { startLine: f.line ?? 1 } } }],
-      partialFingerprints: { "repoguard/v1": f.fingerprint },
-      ...(suppression
-        ? { suppressions: [{ kind: "external", status: "accepted", justification: `${SUPPRESSION_LABEL_CS[suppression.status] ?? suppression.status}: ${suppression.note}` }] }
-        : {}),
-    };
-  });
-  return {
-    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
-    version: "2.1.0",
-    runs: [
-      {
-        tool: { driver: { name: "RepoGuard", version, informationUri: "https://github.com/sfrib/Exomix-parrots/tree/main/repoguard", rules } },
-        versionControlProvenance: repo.lastCommitSha
-          ? [{ repositoryUri: repo.htmlUrl, revisionId: repo.lastCommitSha, branch: repo.defaultBranch }]
-          : undefined,
-        results,
-      },
-    ],
-  };
 }
 
 export function toJson(repo: RepoWithFindings, locale: Locale = "en") {

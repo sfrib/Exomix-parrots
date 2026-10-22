@@ -1,0 +1,28 @@
+# Example: run RepoGuard on every push and pull request, and send findings to
+# the repository's Security tab (Code scanning).
+#
+# Copy this file to .github/workflows/repoguard.yml in your repository.
+
+name: RepoGuard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write # required to upload SARIF to code scanning
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: RepoGuard scan
+        uses: sfrib/Exomix-parrots/repoguard@main
+        with:
+          path: "."
+          fail-on: high # fail the build on critical/high findings
+          exclude: "tests/fixtures" # skip intentionally-vulnerable test data

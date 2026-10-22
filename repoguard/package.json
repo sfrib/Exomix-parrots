@@ -1,17 +1,23 @@
 {
   "name": "repoguard",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Defensive security scanner for your own GitHub repositories",
+  "bin": {
+    "repoguard": "cli/dist/cli/src/index.js"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "cli": "node cli/dist/cli/src/index.js",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "prepare": "npm run build:cli"
   },
   "engines": {
     "node": ">=20"
