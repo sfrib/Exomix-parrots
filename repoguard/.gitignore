@@ -1,0 +1,13 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+*.db
+*.db-journal
+src/generated/
+
+# RepoGuard CLI build output
+cli/dist/

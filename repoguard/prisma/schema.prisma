@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  githubId       Int      @unique
+  login          String
+  name           String?
+  avatarUrl      String?
+  // GitHub OAuth token, AES-256-GCM encrypted (see src/lib/crypto.ts)
+  encryptedToken String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  repos          Repo[]
+  sites          Site[]
+}
+
+model Repo {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubId       Int
+  fullName       String
+  defaultBranch  String
+  isPrivate      Boolean   @default(false)
+  htmlUrl        String
+  // Newline-separated path prefixes excluded from scanning
+  excludePaths   String    @default("")
+  lastCodeScanAt DateTime?
+  lastDepScanAt  DateTime?
+  lastCommitSha  String?
+  createdAt      DateTime  @default(now())
+  scans          Scan[]
+  findings       Finding[]
+  dependencies   Dependency[]
+  suppressions   Suppression[]
+  threatModels   ThreatModel[]
+
+  @@unique([userId, githubId])
+}
+
+/** A live website the user has verified they own, for passive security auditing. */
+model Site {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  origin      String // normalized https origin, e.g. https://example.com
+  host        String
+  verified    Boolean     @default(false)
+  // Random token the owner publishes (file or DNS TXT) to prove control
+  verifyToken String
+  verifiedAt  DateTime?
+  lastScore   Int?
+  lastGrade   String?
+  lastAuditAt DateTime?
+  createdAt   DateTime    @default(now())
+  audits      SiteAudit[]
+
+  @@unique([userId, origin])
+}
+
+model SiteAudit {
+  id         String    @id @default(cuid())
+  siteId     String
+  site       Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  status     String // "running" | "done" | "failed"
+  score      Int?
+  grade      String?
+  findings   String    @default("[]") // JSON array of SiteFinding (src/lib/site/audit.ts)
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([siteId, startedAt])
+}
+
+model Scan {
+  id           String    @id @default(cuid())
+  repoId       String
+  repo         Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  kind         String // "code" | "deps"
+  status       String // "running" | "done" | "failed"
+  trigger      String    @default("manual") // "manual" | "cron"
+  commitSha    String?
+  filesScanned Int       @default(0)
+  // Findings that appeared / disappeared compared with the previous scan of the same kind
+  newCount      Int      @default(0)
+  resolvedCount Int      @default(0)
+  error        String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([repoId, kind, startedAt])
+}
+
+model Finding {
+  id               String   @id @default(cuid())
+  repoId           String
+  repo             Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  kind             String // "code" | "dependency" | "repo"
+  // Stable identity used to keep firstSeenAt across scans
+  fingerprint      String
+  ruleId           String
+  severity         String // "critical" | "high" | "medium" | "low"
+  title            String
+  cwe              String?
+  file             String?
+  line             Int?
+  snippet          String?
+  explanation      String
+  fix              String
+  // Dependency-specific fields
+  packageName      String?
+  ecosystem        String?
+  installedVersion String?
+  fixedVersion     String?
+  advisoryId       String?
+  aliases          String? // comma-separated, e.g. CVE ids
+  cvssScore        Float?
+  cvssVector       String?
+  referenceUrl     String?
+  // Optional AI review (JSON, see src/lib/ai-review.ts); carried over between scans by fingerprint
+  aiReview         String?
+  aiReviewedAt     DateTime?
+  firstSeenAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([repoId, kind])
+}
+
+/** AI attack-scenario analysis (threat model): modeler → defender → auditor. JSON per stage. */
+model ThreatModel {
+  id         String    @id @default(cuid())
+  repoId     String
+  repo       Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  status     String // "running" | "done" | "failed"
+  stage      String    @default("scenarios") // stage currently running
+  model      String
+  commitSha  String?
+  // Finding references given to the model (F1, F2… → fingerprint, title, location)
+  inputs     String    @default("[]")
+  scenarios  String?
+  defenses   String?
+  audit      String?
+  error      String?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([repoId, createdAt])
+}
+
+/** Triage decision for a finding, matched by fingerprint so it survives re-scans. */
+model Suppression {
+  id          String   @id @default(cuid())
+  repoId      String
+  repo        Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  fingerprint String
+  status      String // "false_positive" | "accepted_risk"
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@unique([repoId, fingerprint])
+}
+
+model Dependency {
+  id          String  @id @default(cuid())
+  repoId      String
+  repo        Repo    @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  ecosystem   String
+  name        String
+  version     String
+  manifest    String
+  direct      Boolean @default(true)
+  approximate Boolean @default(false)
+
+  @@index([repoId])
+}
+
+model Advisory {
+  id        String   @id
+  json      String
+  fetchedAt DateTime @default(now())
+}

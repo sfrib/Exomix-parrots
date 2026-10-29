@@ -1,0 +1,121 @@
+name: "RepoGuard security scan"
+description: "Defensive static + dependency security scan. Uploads SARIF to GitHub code scanning and can fail the build on new critical/high findings."
+author: "RepoGuard"
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  path:
+    description: "Folder to scan, relative to the repository root."
+    required: false
+    default: "."
+  fail-on:
+    description: "Fail the job if any finding is at or above this severity: critical | high | medium | low | none."
+    required: false
+    default: "high"
+  lang:
+    description: "Report language for the human-readable summary: en | cs."
+    required: false
+    default: "en"
+  exclude:
+    description: "Path prefixes to skip, separated by spaces or newlines (e.g. 'tests/fixtures vendor')."
+    required: false
+    default: ""
+  offline:
+    description: "Skip the OSV.dev dependency lookup (no network). true | false."
+    required: false
+    default: "false"
+  upload-sarif:
+    description: "Upload the SARIF report to GitHub code scanning (needs security-events: write). true | false."
+    required: false
+    default: "true"
+  node-version:
+    description: "Node.js version used to build and run the scanner."
+    required: false
+    default: "20"
+
+outputs:
+  sarif-file:
+    description: "Path to the generated SARIF report."
+    value: ${{ steps.scan.outputs.sarif_file }}
+  exit-code:
+    description: "0 when clean, 1 when findings met the fail-on threshold."
+    value: ${{ steps.scan.outputs.exit_code }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Build RepoGuard CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        # Dev dependencies only (TypeScript); --ignore-scripts skips the webapp's
+        # Prisma postinstall, which the CLI does not need.
+        npm ci --ignore-scripts
+        npm run build:cli
+
+    - name: Run RepoGuard scan
+      id: scan
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      # Inputs are passed through the environment and never interpolated into the
+      # script with ${{ }}, so a crafted input value cannot inject shell commands.
+      env:
+        RG_ACTION_PATH: ${{ github.action_path }}
+        RG_PATH: ${{ inputs.path }}
+        RG_LANG: ${{ inputs.lang }}
+        RG_FAIL_ON: ${{ inputs.fail-on }}
+        RG_OFFLINE: ${{ inputs.offline }}
+        RG_EXCLUDE: ${{ inputs.exclude }}
+      run: |
+        set +e
+        SARIF="${RUNNER_TEMP:-/tmp}/repoguard.sarif"
+        CLI="$RG_ACTION_PATH/cli/dist/cli/src/index.js"
+
+        OFFLINE=()
+        if [ "$RG_OFFLINE" = "true" ]; then OFFLINE=(--offline); fi
+
+        EXCLUDES=()
+        for p in $RG_EXCLUDE; do EXCLUDES+=(--exclude "$p"); done
+
+        # When scanning a subfolder, report paths relative to the repo root so
+        # code-scanning annotations line up with the files in the repository.
+        PREFIX=()
+        if [ "$RG_PATH" != "." ] && [ -n "$RG_PATH" ]; then PREFIX=(--path-prefix "$RG_PATH"); fi
+
+        # Human-readable summary (never fails the step).
+        node "$CLI" scan "$RG_PATH" --lang "$RG_LANG" "${OFFLINE[@]}" "${PREFIX[@]}" "${EXCLUDES[@]}" --fail-on none
+
+        # SARIF report for code scanning, applying the fail-on threshold.
+        node "$CLI" scan "$RG_PATH" --format sarif --output "$SARIF" "${OFFLINE[@]}" "${PREFIX[@]}" "${EXCLUDES[@]}" --fail-on "$RG_FAIL_ON"
+        CODE=$?
+        echo "sarif_file=$SARIF" >> "$GITHUB_OUTPUT"
+        echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+        if [ -f "$SARIF" ]; then echo "sarif_written=true" >> "$GITHUB_OUTPUT"; fi
+        exit 0
+
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' && steps.scan.outputs.sarif_written == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif_file }}
+        category: repoguard
+
+    - name: Enforce fail-on threshold
+      if: ${{ always() }}
+      shell: bash
+      env:
+        RG_EXIT: ${{ steps.scan.outputs.exit_code }}
+        RG_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        if [ "$RG_EXIT" != "0" ]; then
+          echo "::error::RepoGuard found findings at or above the '$RG_FAIL_ON' threshold."
+          exit 1
+        fi
+        echo "RepoGuard: no findings at or above the '$RG_FAIL_ON' threshold."
