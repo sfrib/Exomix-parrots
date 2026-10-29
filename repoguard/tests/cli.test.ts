@@ -120,8 +120,16 @@ describe("CLI .repoguardignore", () => {
   it("matches rule ignores globally and by path prefix", () => {
     const ig = [{ ruleId: "js.dangerous.eval", pathPrefix: "lib/rules" }];
     expect(isIgnored(ig, "js.dangerous.eval", "lib/rules/js.ts")).toBe(true);
+    expect(isIgnored(ig, "js.dangerous.eval", "lib/rules")).toBe(true); // exact match
     expect(isIgnored(ig, "js.dangerous.eval", "app/real.ts")).toBe(false); // elsewhere still reported
     expect(isIgnored([{ ruleId: "php.sqli" }], "php.sqli", "anywhere.php")).toBe(true);
+  });
+
+  it("a scoped path prefix does not swallow a sibling file (no loose substring match)", () => {
+    const ig = [{ ruleId: "secret.generic", pathPrefix: "src/api" }];
+    expect(isIgnored(ig, "secret.generic", "src/api/keys.ts")).toBe(true); // inside the directory
+    expect(isIgnored(ig, "secret.generic", "src/apiClient.ts")).toBe(false); // sibling must still be reported
+    expect(isIgnored(ig, "secret.generic", "src/api-internal/x.ts")).toBe(false);
   });
 
   it("drops ignored findings from a scan but keeps the rest", async () => {

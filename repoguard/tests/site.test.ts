@@ -125,6 +125,9 @@ describe("audit checks — false-positive hardening (from adversarial review)", 
     expect(aOnly.findings.map((x) => x.id)).not.toContain("site.mixed-content");
     const css = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders, body: '<link rel="stylesheet" href="http://cdn.example/a.css">' }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
     expect(css.findings.map((x) => x.id)).toContain("site.mixed-content");
+    // A non-resource <link rel="canonical"> over http is metadata, not mixed content.
+    const canonical = await auditSite("https://x.example", f({ "/": resp({ headers: baseHeaders, body: '<link rel="canonical" href="http://x.example/page"><link rel="dns-prefetch" href="http://cdn.example">' }), "/.well-known/security.txt": resp({ status: 200, body: "Contact: x" }) }), "en");
+    expect(canonical.findings.map((x) => x.id)).not.toContain("site.mixed-content");
   });
 
   it("does not flag /backup.zip from a page that merely contains the letters PK", async () => {
@@ -200,6 +203,12 @@ describe("auditSite — deeper checks", () => {
     expect(weak.findings.map((f) => f.id)).toContain("site.tls.weak-cipher");
     const noPfs = await auditSite("https://demo.example", okFetcher, "en", cert({ protocol: "TLSv1.2", cipher: "AES256-SHA256" }));
     expect(noPfs.findings.map((f) => f.id)).toContain("site.tls.no-pfs");
+    // Static-RSA GCM (IANA name) has no forward secrecy and must be flagged.
+    const rsaGcm = await auditSite("https://demo.example", okFetcher, "en", cert({ protocol: "TLSv1.2", cipher: "TLS_RSA_WITH_AES_128_GCM_SHA256" }));
+    expect(rsaGcm.findings.map((f) => f.id)).toContain("site.tls.no-pfs");
+    // ECDHE in the IANA name is forward-secret and must NOT be flagged.
+    const ecdheGcm = await auditSite("https://demo.example", okFetcher, "en", cert({ protocol: "TLSv1.2", cipher: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256" }));
+    expect(ecdheGcm.findings.map((f) => f.id)).not.toContain("site.tls.no-pfs");
   });
 
   it("a fully clean site with a good cert has no findings", async () => {

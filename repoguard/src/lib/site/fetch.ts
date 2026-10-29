@@ -140,6 +140,8 @@ export const liveFetch: SiteFetch = async (url, opts = {}) => {
       if (target.protocol === "https:" && parsed.protocol === "http:") redirectedToHttps = true;
       // Only follow a single redirect that stays on the same host.
       if (/^https?:$/.test(target.protocol) && target.hostname === parsed.hostname) {
+        // Release the 3xx response's connection instead of leaving its body unread until bodyTimeout.
+        await res.body?.cancel().catch(() => {});
         const res2 = await doFetch(target.toString());
         return { url: target.toString(), status: res2.status, headers: res2.headers, body: await readCapped(res2, opts.maxBytes ?? DEFAULT_MAX_BYTES), redirectedToHttps };
       }

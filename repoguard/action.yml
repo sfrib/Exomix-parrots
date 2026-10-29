@@ -64,26 +64,36 @@ runs:
       id: scan
       shell: bash
       working-directory: ${{ github.workspace }}
+      # Inputs are passed through the environment and never interpolated into the
+      # script with ${{ }}, so a crafted input value cannot inject shell commands.
+      env:
+        RG_ACTION_PATH: ${{ github.action_path }}
+        RG_PATH: ${{ inputs.path }}
+        RG_LANG: ${{ inputs.lang }}
+        RG_FAIL_ON: ${{ inputs.fail-on }}
+        RG_OFFLINE: ${{ inputs.offline }}
+        RG_EXCLUDE: ${{ inputs.exclude }}
       run: |
         set +e
         SARIF="${RUNNER_TEMP:-/tmp}/repoguard.sarif"
-        CLI="${{ github.action_path }}/cli/dist/cli/src/index.js"
-        OFFLINE=""
-        if [ "${{ inputs.offline }}" = "true" ]; then OFFLINE="--offline"; fi
+        CLI="$RG_ACTION_PATH/cli/dist/cli/src/index.js"
 
-        EXCLUDES=""
-        for p in ${{ inputs.exclude }}; do EXCLUDES="$EXCLUDES --exclude $p"; done
+        OFFLINE=()
+        if [ "$RG_OFFLINE" = "true" ]; then OFFLINE=(--offline); fi
+
+        EXCLUDES=()
+        for p in $RG_EXCLUDE; do EXCLUDES+=(--exclude "$p"); done
 
         # When scanning a subfolder, report paths relative to the repo root so
         # code-scanning annotations line up with the files in the repository.
-        PREFIX=""
-        if [ "${{ inputs.path }}" != "." ] && [ -n "${{ inputs.path }}" ]; then PREFIX="--path-prefix ${{ inputs.path }}"; fi
+        PREFIX=()
+        if [ "$RG_PATH" != "." ] && [ -n "$RG_PATH" ]; then PREFIX=(--path-prefix "$RG_PATH"); fi
 
         # Human-readable summary (never fails the step).
-        node "$CLI" scan "${{ inputs.path }}" --lang "${{ inputs.lang }}" $OFFLINE $PREFIX $EXCLUDES --fail-on none
+        node "$CLI" scan "$RG_PATH" --lang "$RG_LANG" "${OFFLINE[@]}" "${PREFIX[@]}" "${EXCLUDES[@]}" --fail-on none
 
         # SARIF report for code scanning, applying the fail-on threshold.
-        node "$CLI" scan "${{ inputs.path }}" --format sarif --output "$SARIF" $OFFLINE $PREFIX $EXCLUDES --fail-on "${{ inputs.fail-on }}"
+        node "$CLI" scan "$RG_PATH" --format sarif --output "$SARIF" "${OFFLINE[@]}" "${PREFIX[@]}" "${EXCLUDES[@]}" --fail-on "$RG_FAIL_ON"
         CODE=$?
         echo "sarif_file=$SARIF" >> "$GITHUB_OUTPUT"
         echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
@@ -100,9 +110,12 @@ runs:
     - name: Enforce fail-on threshold
       if: ${{ always() }}
       shell: bash
+      env:
+        RG_EXIT: ${{ steps.scan.outputs.exit_code }}
+        RG_FAIL_ON: ${{ inputs.fail-on }}
       run: |
-        if [ "${{ steps.scan.outputs.exit_code }}" != "0" ]; then
-          echo "::error::RepoGuard found findings at or above the '${{ inputs.fail-on }}' threshold."
+        if [ "$RG_EXIT" != "0" ]; then
+          echo "::error::RepoGuard found findings at or above the '$RG_FAIL_ON' threshold."
           exit 1
         fi
-        echo "RepoGuard: no findings at or above the '${{ inputs.fail-on }}' threshold."
+        echo "RepoGuard: no findings at or above the '$RG_FAIL_ON' threshold."

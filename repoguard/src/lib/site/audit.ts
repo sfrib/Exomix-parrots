@@ -112,8 +112,12 @@ const EXPOSED_FIX: L = {
 };
 
 function cookieFindings(home: SiteResponse, locale: Locale): SiteFinding[] {
-  // Headers.getSetCookie() returns all Set-Cookie lines.
-  const cookies = typeof home.headers.getSetCookie === "function" ? home.headers.getSetCookie() : [];
+  // Headers.getSetCookie() returns all Set-Cookie lines; fall back to the single
+  // combined header for Headers implementations (mocks, polyfills) without it.
+  const cookies =
+    typeof home.headers.getSetCookie === "function"
+      ? home.headers.getSetCookie()
+      : [home.headers.get("set-cookie")].filter((c): c is string => Boolean(c));
   // Only session-like cookies matter for hijacking; consent/analytics cookies are intentionally readable.
   const sessionLike = cookies.filter((c) => /^(?:[^=]*?)(sess|sid|token|auth|login|logged_in|csrf|xsrf|remember|wordpress_)/i.test(c.trim()));
   const bad = sessionLike.filter((c) => !/;\s*secure/i.test(c) || !/;\s*httponly/i.test(c) || !/;\s*samesite/i.test(c));
@@ -213,7 +217,15 @@ function mixedContentFindings(origin: string, home: SiteResponse, locale: Locale
   if (!origin.startsWith("https:")) return [];
   // Only resource-loading contexts are mixed content; a plain <a href="http://"> navigation link is not.
   const scriptImg = [...home.body.matchAll(/<(?:script|img|iframe|audio|video|source|embed|object)\b[^>]*\b(?:src|data)\s*=\s*["'](http:\/\/[^"']+)/gi)].map((m) => m[1]);
-  const linkHref = [...home.body.matchAll(/<link\b[^>]*\bhref\s*=\s*["'](http:\/\/[^"']+)/gi)].map((m) => m[1]);
+  // Only resource-loading <link> rels are sub-resources; canonical/alternate/dns-prefetch/preconnect are metadata, not mixed content.
+  const linkHref: string[] = [];
+  for (const m of home.body.matchAll(/<link\b[^>]*>/gi)) {
+    const tag = m[0];
+    const rel = /\brel\s*=\s*["']?([a-z-]+)/i.exec(tag)?.[1]?.toLowerCase() ?? "";
+    if (rel !== "stylesheet" && rel !== "preload" && rel !== "modulepreload") continue;
+    const href = /\bhref\s*=\s*["'](http:\/\/[^"']+)/i.exec(tag)?.[1];
+    if (href) linkHref.push(href);
+  }
   const external = [...scriptImg, ...linkHref];
   if (external.length === 0) return [];
   return [
@@ -287,7 +299,7 @@ function certFindings(host: string, cert: CertInfo | null, locale: Locale): Site
       fix: pick({ en: "Configure the server to prefer modern AEAD ciphers (AES-GCM, ChaCha20-Poly1305) and drop legacy ones.", cs: "Nastavte server tak, aby preferoval moderní AEAD šifry (AES-GCM, ChaCha20-Poly1305) a odstranil staré." }, locale),
       evidence: cert.cipher,
     });
-  } else if (cert.cipher && cert.protocol !== "TLSv1.3" && !/^ECDHE|^DHE|_AES_\d+_GCM/i.test(cert.cipher)) {
+  } else if (cert.cipher && cert.protocol !== "TLSv1.3" && !/DHE/i.test(cert.cipher)) {
     out.push({
       id: "site.tls.no-pfs",
       severity: "low",

@@ -55,5 +55,7 @@ export async function loadConfig(root: string): Promise<RepoGuardConfig> {
 
 /** True when a finding is baselined away by an ignore rule (matched on its pre-prefix path). */
 export function isIgnored(ignores: IgnoreRule[], ruleId: string, file: string | null): boolean {
-  return ignores.some((ig) => ig.ruleId === ruleId && (!ig.pathPrefix || (file != null && (file === ig.pathPrefix || file.startsWith(`${ig.pathPrefix}/`) || file.startsWith(ig.pathPrefix)))));
+  // A pathPrefix matches the exact file or a directory prefix only — never an
+  // unbounded substring, so "src/api" does not swallow "src/apiClient.ts".
+  return ignores.some((ig) => ig.ruleId === ruleId && (!ig.pathPrefix || (file != null && (file === ig.pathPrefix || file.startsWith(`${ig.pathPrefix}/`)))));
 }
