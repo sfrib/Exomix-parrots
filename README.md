@@ -1,5 +1,7 @@
 # ExoMix – Complete App
 
+> **LES.cz:** satelitní vzdělávací web o přírodních materiálech pro papoušky je v adresáři [`les-cz/`](./les-cz/README.md) (samostatná Next.js aplikace, nasazuje se zvlášť).
+
 > **Strategický plán:** Detailní produktový roadmap najdeš v [`docs/ROADMAP.md`](./docs/ROADMAP.md). Používej ho jako zdroj pravdy pro prioritizaci dalších modulů a integrací.
 
 Kompletní reference implementace ExoMixu: Next.js 14 (App Router) front-end, REST API, PDF export etiket, notifikační workflow a podpůrné skripty pro veterinární revize receptů.

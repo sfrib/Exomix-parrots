@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --forest: #2f6b3a;
+  --pine: #13311f;
+  --sand: #f3ebdd;
+  --paper: #fbf7ef;
+  --bark: #6b4a2b;
+  --honey: #f2d675;
+  --berry: #a3262a;
+  --ink: #1c2a1f;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-feature-settings: 'kern', 'liga';
+  overflow-x: clip;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+::selection { background: var(--honey); color: var(--pine); }
+
+:focus-visible {
+  outline: 3px solid var(--honey);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@layer components {
+  /* Na mobilu vodorovně posuvná řada karet, od sm výše mřížka. */
+  .rail { @apply -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0; }
+  .rail-item { @apply w-[78%] shrink-0 snap-start sm:w-auto; }
+  .container-les { @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.18em] text-forest-600; }
+  .h-display { @apply font-display font-semibold tracking-tight text-forest-900; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-honey; }
+  .btn-buy { @apply btn bg-honey-300 text-forest-950 shadow-sm hover:bg-honey-400 active:translate-y-px; }
+  .btn-primary { @apply btn bg-forest-700 text-white hover:bg-forest-800; }
+  .btn-ghost { @apply btn border border-forest-700/25 bg-white/70 text-forest-800 hover:border-forest-700/50 hover:bg-white; }
+  .btn-danger { @apply btn bg-berry-600 text-white hover:bg-berry-700; }
+  .card { @apply rounded-2xl border border-forest-900/10 bg-white shadow-card; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium; }
+  .prose-les p { @apply leading-relaxed text-ink/85; }
+  .prose-les p + p { @apply mt-3; }
+  .prose-les ul { @apply mt-2 list-disc space-y-1.5 pl-5 text-ink/85; }
+  .prose-les h2 { @apply mt-8 font-display text-2xl font-semibold text-forest-900; }
+  .prose-les h3 { @apply mt-6 font-display text-xl font-semibold text-forest-900; }
+  .prose-les a { @apply font-medium text-forest-700 underline decoration-forest-300 underline-offset-2 hover:decoration-forest-700; }
+  .paper-texture {
+    background-color: var(--sand);
+    background-image:
+      radial-gradient(rgba(107, 74, 43, 0.06) 1px, transparent 1px),
+      radial-gradient(rgba(47, 107, 58, 0.05) 1px, transparent 1px);
+    background-size: 22px 22px, 31px 31px;
+    background-position: 0 0, 11px 7px;
+  }
+  .label-tag {
+    @apply relative inline-flex items-center rounded-md border border-bark-500/30 bg-sand-50 px-2.5 py-1 font-display text-sm font-semibold text-bark-600;
+  }
+}
